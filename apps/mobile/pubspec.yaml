@@ -1,0 +1,20 @@
+name: alexandria_mobile
+description: Alexandria — an open-source, ad-free, human-first social reading platform.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.2.1 # EB Garamond + UnifrakturMaguntia (both OFL)
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: false
