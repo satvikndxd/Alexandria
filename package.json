@@ -1,0 +1,22 @@
+{
+  "name": "alexandria",
+  "private": true,
+  "description": "Alexandria — an open-source, ad-free, human-first social reading platform.",
+  "license": "AGPL-3.0-only",
+  "packageManager": "npm@10.9.8",
+  "workspaces": [
+    "apps/web",
+    "packages/ui",
+    "packages/core"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.9"
+  }
+}

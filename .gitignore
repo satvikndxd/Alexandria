@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Builds
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+
+# Go
+apps/api/bin/
+*.exe
+
+# Flutter
+apps/mobile/.dart_tool/
+apps/mobile/build/
+apps/mobile/.flutter-plugins*
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs & OS noise
+*.log
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
