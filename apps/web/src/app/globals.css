@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ————— Alexandria base sheet ————— */
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  background-color: #e8ddc4;
+}
+
+body {
+  @apply bg-parchment text-ink font-body antialiased;
+  /* Subtle paper grain: procedural turbulence, no image asset needed. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.07 0 0 0 0 0.09 0 0 0 0 0.07 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+
+::selection {
+  background: #d9471f;
+  color: #f0e7d2;
+}
+
+/* Old-style numerals & true small caps where the font provides them */
+.oldstyle {
+  font-variant-numeric: oldstyle-nums;
+}
+
+.smallcaps {
+  font-variant-caps: small-caps;
+  letter-spacing: 0.08em;
+}
+
+/* Engraved label: the tiny tracked-out uppercase captions used across the UI */
+.engraved-label {
+  @apply font-body text-[0.68rem] uppercase tracking-engraved text-botanical;
+}
+
+/* Rule pairs — the double hairline rules of old title pages */
+.double-rule {
+  border-top: 1px solid #111713;
+  position: relative;
+}
+.double-rule::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 0;
+  right: 0;
+  border-top: 1px solid #111713;
+}
+
+/* Manuscript card: sharp corners, ink border, print-block depth on hover */
+.manuscript-card {
+  @apply border-2 border-ink bg-parchment-light rounded-none transition-[box-shadow,transform] duration-150;
+}
+.manuscript-card:hover {
+  @apply shadow-block -translate-x-[2px] -translate-y-[2px];
+}
+
+/* Spoiler veil */
+.spoiler-veil {
+  filter: blur(6px);
+  user-select: none;
+  cursor: pointer;
+  transition: filter 200ms ease;
+}
+.spoiler-veil.revealed {
+  filter: none;
+  user-select: auto;
+}
+
+/* Reduced motion: kill the hover lift and any transition */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Scrollbar in keeping with the ink/parchment scheme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #111713 #d9ccae;
+}

@@ -1,0 +1,90 @@
+# Alexandria — local development stack.
+# One command brings up every backing service the modular monolith needs:
+#   docker compose -f infrastructure/docker-compose.yml up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: alexandria
+      POSTGRES_PASSWORD: alexandria
+      POSTGRES_DB: alexandria
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../packages/db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alexandria"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data"]
+    ports:
+      - "4222:4222"
+      - "8222:8222" # monitoring
+    volumes:
+      - natsdata:/data
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.9
+    environment:
+      MEILI_MASTER_KEY: alexandria-dev-key
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "7700:7700"
+    volumes:
+      - meilidata:/meili_data
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: alexandria
+      MINIO_ROOT_PASSWORD: alexandria-dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: ../../infrastructure/api.Dockerfile
+    environment:
+      DATABASE_URL: postgres://alexandria:alexandria@postgres:5432/alexandria?sslmode=disable
+      NATS_URL: nats://nats:4222
+      MEILI_URL: http://meilisearch:7700
+      S3_ENDPOINT: http://minio:9000
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    profiles: ["full"] # `--profile full` also builds the Go services
+
+  worker:
+    build:
+      context: ../apps/api
+      dockerfile: ../../infrastructure/api.Dockerfile
+    command: ["/app/worker"]
+    environment:
+      DATABASE_URL: postgres://alexandria:alexandria@postgres:5432/alexandria?sslmode=disable
+      NATS_URL: nats://nats:4222
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    profiles: ["full"]
+
+volumes:
+  pgdata:
+  natsdata:
+  meilidata:
+  miniodata:
