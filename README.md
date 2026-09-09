@@ -145,6 +145,10 @@ club spoiler gating, search degradation, and follow/block feed semantics.
 
 Full guide: [`docs/SETUP.md`](docs/SETUP.md).
 
+The complete pre-development specification — product vision through cost
+model, thirty documents, each citing the file that implements it — lives in
+[`docs/plan/INDEX.md`](docs/plan/INDEX.md).
+
 ## Sourcing & compliance
 
 - **Open Library:** metadata via API with identifying User-Agent, 1 req/s
@@ -172,7 +176,11 @@ Full guide: [`docs/SETUP.md`](docs/SETUP.md).
    integration suite; **web client wired to the live API** and recomposed
    against the reference sheet (three-column folio, engraved rail, reading-life
    right rail), with an end-to-end smoke script proving the whole loop
-3. **Reader** — EPUB/TXT renderer with parchment typography, annotations
+3. **Reader** ✅ (TXT) — Gutenberg texts cached once, boilerplate stripped with
+   the license/trademark preserved as data, chapterized with rune-stable
+   anchors; typeset reader with per-reader typography (size/leading/margin/
+   theme), illuminated drop cap, and private margin notes/highlights ·
+   *(EPUB ⏳)*
 4. **Community** — scholar verification + peer review, clubs with LiveKit voice/video
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a PR.

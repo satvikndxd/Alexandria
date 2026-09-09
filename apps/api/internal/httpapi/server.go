@@ -19,30 +19,35 @@ import (
 	"github.com/alexandria-reads/alexandria/apps/api/internal/config"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/domain"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/ratelimit"
+	"github.com/alexandria-reads/alexandria/apps/api/internal/reader"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/search"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/store"
 )
 
 type Server struct {
-	cfg      config.Config
-	store    *store.Store
-	authSvc  *auth.Service
-	magic    *auth.MagicLinks
-	search   *search.Client
-	friction domain.FrictionPolicy
-	limiter  *ratelimit.Limiter
-	router   chi.Router
+	cfg       config.Config
+	store     *store.Store
+	authSvc   *auth.Service
+	magic     *auth.MagicLinks
+	search    *search.Client
+	textCache *reader.Cache
+	bootCtx   context.Context
+	friction  domain.FrictionPolicy
+	limiter   *ratelimit.Limiter
+	router    chi.Router
 }
 
 // New wires the whole HTTP edge. Construction is side-effect free so tests can
 // build a server against a scratch database and drive it with httptest.
 func New(cfg config.Config, st *store.Store, authSvc *auth.Service, magic *auth.MagicLinks, sc *search.Client) *Server {
 	s := &Server{
-		cfg:     cfg,
-		store:   st,
-		authSvc: authSvc,
-		magic:   magic,
-		search:  sc,
+		cfg:       cfg,
+		store:     st,
+		authSvc:   authSvc,
+		magic:     magic,
+		search:    sc,
+		textCache: reader.NewCache(cfg.ReaderCacheDir),
+		bootCtx:   context.Background(),
 		friction: domain.FrictionPolicy{
 			MinBodyChars:      cfg.ReviewMinChars,
 			MaxBodyChars:      20000,
@@ -149,6 +154,10 @@ func (s *Server) routes() chi.Router {
 
 		// ---- discovery ----
 		r.Get("/search", s.handleSearch)
+
+		// ---- reader (Phase 3) ----
+		r.Get("/editions/{id}/reader", s.handleReaderMeta)
+		r.Get("/editions/{id}/reader/chapter/{idx}", s.handleReaderChapter)
 
 		// ---- trust & safety ----
 		r.Post("/reports", requireAuth(s.handleCreateReport))

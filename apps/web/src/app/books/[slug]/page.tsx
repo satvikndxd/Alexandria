@@ -81,10 +81,10 @@ export default async function BookPage({ params }: { params: { slug: string } })
             <Link href={`/books/${w.slug}/purchase`} className="btn-print">
               Purchase options
             </Link>
-            {w.gutenbergId ? (
-              <span className="btn-print pointer-events-none opacity-70" title="Reader arrives in Phase 3">
-                Read public-domain edition · soon
-              </span>
+            {readableEdition(detail) ? (
+              <Link href={`/read/${readableEdition(detail)}`} className="btn-print">
+                Read the public-domain edition
+              </Link>
             ) : null}
           </div>
         </div>
@@ -245,6 +245,12 @@ export default async function BookPage({ params }: { params: { slug: string } })
       </div>
     </PageFrame>
   );
+}
+
+/** The first edition with a cached public-domain text, if any. */
+function readableEdition(detail: { editions: { id: string; gutenberg_id?: number | null }[] }): string | null {
+  const e = detail.editions.find((x) => x.gutenberg_id != null);
+  return e ? e.id : null;
 }
 
 function Histogram({ distribution }: { distribution: { rating: number; n: number }[] }) {

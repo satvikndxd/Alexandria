@@ -43,6 +43,9 @@ type Config struct {
 	// Project Gutenberg official offline catalog
 	GutenbergCatalogURL string
 
+	// Reader text cache (immutable objects keyed by etext id; MinIO in prod)
+	ReaderCacheDir string
+
 	// Identity / WebAuthn
 	WebAuthnRPID          string // relying-party ID, e.g. alexandria.example
 	WebAuthnRPDisplayName string
@@ -82,6 +85,7 @@ func Load() Config {
 
 		GutenbergCatalogURL: getenv("GUTENBERG_CATALOG_URL",
 			"https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv.gz"),
+		ReaderCacheDir:      getenv("READER_CACHE_DIR", ""),
 
 		WebAuthnRPID:          getenv("WEBAUTHN_RP_ID", "localhost"),
 		WebAuthnRPDisplayName: getenv("WEBAUTHN_RP_NAME", "Alexandria"),
