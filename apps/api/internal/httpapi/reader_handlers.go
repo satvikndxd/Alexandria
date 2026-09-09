@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"io"
 	"net/http"
 	"strconv"
 	"sync"
@@ -52,6 +53,7 @@ func (s *Server) handleReaderMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	respondJSON(w, http.StatusOK, map[string]any{
 		"edition_id":     edition.ID,
+		"source":         orDefault(ed.Source, "gutenberg"),
 		"work_slug":      edition.WorkSlug,
 		"work_title":     edition.WorkTitle,
 		"title":          ed.Title,
@@ -81,14 +83,19 @@ func (s *Server) handleReaderChapter(w http.ResponseWriter, r *http.Request) {
 		"index": idx,
 		"text":  text,
 	}
-	// The reader's own margin for this chapter, when signed in. RLS makes this
-	// incapable of returning anyone else's notes.
+	// The reader's own margin for this chapter, when signed in. Annotations
+	// are RLS-private, so this MUST run inside the caller's scoped
+	// transaction — outside it, Postgres hides the reader's own notes too.
 	if sess, ok3 := CurrentUser(r); ok3 {
-		anns, err := s.store.Queries().ListAnnotationsForEdition(r.Context(), db.ListAnnotationsForEditionParams{
-			UserID: sess.UserID, EditionID: edition.ID,
-			ChapterIdx: int32Ptr(idx),
-		})
-		if err == nil {
+		var anns []db.Annotation
+		if err := s.scopedRead(r, func(q *db.Queries) error {
+			rows, err := q.ListAnnotationsForEdition(r.Context(), db.ListAnnotationsForEditionParams{
+				UserID: sess.UserID, EditionID: edition.ID,
+				ChapterIdx: int32Ptr(idx),
+			})
+			anns = rows
+			return err
+		}); err == nil {
 			resp["annotations"] = anns
 		}
 	}
@@ -106,9 +113,18 @@ func (s *Server) readerEdition(w http.ResponseWriter, r *http.Request) (*db.GetE
 		respondStoreError(w, err)
 		return nil, nil, false
 	}
+	// An uploaded, rights-recorded EPUB takes precedence over the Gutenberg
+	// text: it is the edition a moderator actually approved.
+	if s.textCache.HasEpub(edition.ID) {
+		book, err := s.textCache.EpubBook(r.Context(), edition.ID)
+		if err == nil {
+			return edition, reader.EditionFromEpub(edition.ID, edition.Language, book), true
+		}
+		// Fall through to Gutenberg rather than stranding the reader.
+	}
 	if edition.GutenbergID == nil {
 		respondError(w, http.StatusNotFound, "not_readable",
-			"This edition has no public-domain text in the cache yet.")
+			"This edition has no readable text in the cache yet.")
 		return nil, nil, false
 	}
 	ed, err := s.cachedEdition(*edition.GutenbergID, edition.Language)
@@ -117,7 +133,40 @@ func (s *Server) readerEdition(w http.ResponseWriter, r *http.Request) (*db.GetE
 			"The text cache could not reach Project Gutenberg. Try again shortly.")
 		return nil, nil, false
 	}
+	ed.Source = "gutenberg"
 	return edition, ed, true
 }
 
+// handleUploadEpub stores a rights-checked EPUB container for an edition.
+// Moderator-only: any signed-in reader uploading arbitrary containers is a
+// copyright pipeline, not a library.
+func (s *Server) handleUploadEpub(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "bad_id", "Malformed edition id.")
+		return
+	}
+	defer r.Body.Close() //nolint:errcheck
+	data, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+	if err != nil || len(data) == 0 {
+		respondError(w, http.StatusBadRequest, "bad_body", "Upload the EPUB file itself.")
+		return
+	}
+	book, err := s.textCache.StoreEpub(id, data)
+	if err != nil {
+		respondError(w, http.StatusUnprocessableEntity, "bad_epub", err.Error())
+		return
+	}
+	respondJSON(w, http.StatusCreated, map[string]any{
+		"status": "stored", "title": book.Title, "chapters": len(book.Chapters),
+	})
+}
+
 func int32Ptr(i int) *int32 { v := int32(i); return &v }
+
+func orDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}

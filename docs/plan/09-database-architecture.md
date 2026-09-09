@@ -40,6 +40,15 @@ public-read policy. Request path sets `app.user_id` via `SET LOCAL`; workers
 set `app.service='on'`. Superusers bypass RLS by definition, so production
 connects as `alexandria_app`.
 
+## The RLS context trap (review checklist)
+A query against an RLS-covered table executed on a bare pool connection sees
+*nothing* — not even the caller's own rows — because `app.user_id` is unset.
+This has bitten three handler paths already (club message gates, room gates,
+reader annotations), each time producing a plausible 403/404/empty instead of
+an error. Review rule: **any read of shelves, shelf_items, reading_sessions,
+annotations or notifications must run through `scopedRead` / `TxUser` /
+`ReadUser`; any raw `Queries()` call touching those tables is a bug.**
+
 ## Indexing policy
 Every hot query names its index in review: trigram GIN on titles/names for the
 degraded search path, partial indexes for open sessions and unread

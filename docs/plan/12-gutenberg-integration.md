@@ -1,7 +1,8 @@
 # 12 — Project Gutenberg Integration
 
-**Status:** catalog ingestion implemented and verified against the live feed;
-text caching + reader ⏳ Phase 3
+**Status:** catalog ingestion, text caching, TXT reader and EPUB renderer
+implemented · `internal/reader`, `internal/epub`, `/v1/editions/{id}/reader*`,
+moderator EPUB upload at `/v1/editions/{id}/epub`
 
 ## Compliance shape (non-negotiable)
 - **Never crawl the website.** We consume the official offline catalog:
@@ -41,8 +42,18 @@ flowchart LR
 - Bounded batches (`RUN_GUTENBERG_CATALOG=true`, 500 rows/run) so a worker
   restart never monopolizes the database.
 
-## Reader requirements (Phase 3)
-Strip PG boilerplate (header/license) into `metadata.boilerplate`, keep the
-reading text clean; chapter detection by regex on the cleaned text; anchors
-are `(chapter_idx, start_off, end_off)` — the annotation schema already exists
-and is RLS-private.
+## Reader (implemented, TXT + EPUB)
+- PG boilerplate (header/license) is separated into `Edition.Boilerplate`:
+  preserved on the record, never typeset; the trademark prints at the foot of
+  every chapter.
+- TXT chapters by conventional headings with a single-chapter fallback; EPUB
+  chapters in spine order from the OPF, nav documents excluded, block-level
+  text extracted with a token-stream stack (divs do not merge their
+  paragraphs; inline markup folds in; numeric and named entities decoded).
+- Anchors are `(chapter_idx, start_off, end_off)` in runes over the served
+  chapter string for BOTH formats, so highlights survive reflow, theme and
+  font changes.
+- EPUB containers are moderator-uploaded, parse-before-store (an unreadable
+  container can never land in the cache and 404 every reader later),
+  immutable once stored, and preferred over the Gutenberg text when present.
+  The licence note travels with the edition: upload ≠ public domain.

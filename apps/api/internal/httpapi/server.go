@@ -182,6 +182,7 @@ func (s *Server) routes() chi.Router {
 		r.Post("/moderation/scholars/{userID}", requireModeration(s.handleSetScholarStatus))
 
 		// ---- reader (Phase 3) ----
+		r.Post("/editions/{id}/epub", requireModeration(s.handleUploadEpub))
 		r.Get("/editions/{id}/reader", s.handleReaderMeta)
 		r.Get("/editions/{id}/reader/chapter/{idx}", s.handleReaderChapter)
 

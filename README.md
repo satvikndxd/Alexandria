@@ -180,7 +180,8 @@ model, thirty documents, each citing the file that implements it — lives in
    the license/trademark preserved as data, chapterized with rune-stable
    anchors; typeset reader with per-reader typography (size/leading/margin/
    theme), illuminated drop cap, and private margin notes/highlights ·
-   *(EPUB ⏳)*
+   EPUB renderer ✅ (spine-ordered chapters, reflow-safe anchors,
+   moderator upload with parse-before-store)
 5. **Portability** ✅ — Goodreads/StoryGraph CSV importers and a Kindle
    clippings parser that aligns highlights to real text offsets; row-by-row
    import reports; one-command JSON export and account deletion

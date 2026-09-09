@@ -47,6 +47,8 @@ type Edition struct {
 	LicenseNote  string     `json:"license_note"`
 	TrademarkNote string    `json:"trademark_note"`
 	Chapters     []Chapter  `json:"chapters"`
+	// Source records where the reading text came from: gutenberg or epub.
+	Source string `json:"source,omitempty"`
 }
 
 // ---- fetching: cache-once, never hotlink -----------------------------------------

@@ -9,6 +9,7 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -122,6 +123,7 @@ func newEnv(t *testing.T) *env {
 		RateBurst:  1_000_000,
 		// Rooms are configured in tests so authorization (not availability)
 		// is what the suite exercises.
+		ReaderCacheDir:   t.TempDir(),
 		LiveKitURL:       "wss://lk.test",
 		LiveKitAPIKey:    "test-key",
 		LiveKitAPISecret: "test-secret-test-secret",
@@ -229,6 +231,24 @@ func (e *env) sendRaw(c *http.Client, method, path, raw, csrf string) *http.Resp
 		e.t.Fatalf("request: %v", err)
 	}
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	if csrf != "" {
+		req.Header.Set(auth.CSRFHeaderName, csrf)
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		e.t.Fatalf("%s %s: %v", method, path, err)
+	}
+	return resp
+}
+
+// sendRawBytes posts binary bodies (EPUB containers).
+func (e *env) sendRawBytes(c *http.Client, method, path string, raw []byte, csrf string) *http.Response {
+	e.t.Helper()
+	req, err := http.NewRequestWithContext(e.ctx, method, e.url+path, bytes.NewReader(raw))
+	if err != nil {
+		e.t.Fatalf("request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/epub+zip")
 	if csrf != "" {
 		req.Header.Set(auth.CSRFHeaderName, csrf)
 	}

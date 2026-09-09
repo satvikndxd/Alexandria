@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 
 type Meta = {
   edition_id: string;
+  source?: string;
   work_slug: string;
   work_title: string;
   title: string;
@@ -61,7 +62,7 @@ export default async function ReadPage({
             <Link href={`/books/${meta.work_slug}`} className="underline">
               {meta.work_title}
             </Link>{" "}
-            · public-domain edition
+            · {meta.source === "epub" ? "EPUB edition" : "public-domain edition"}
           </p>
           <h1 className="mt-1 text-[clamp(1.4rem,2.6vw,1.9rem)] text-ink">{chapterTitle(meta, chapterIndex)}</h1>
         </div>
