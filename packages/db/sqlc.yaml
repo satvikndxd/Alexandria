@@ -5,14 +5,21 @@ sql:
     queries: "queries"
     gen:
       go:
-        package: "store"
-        out: "../../apps/api/internal/store"
+        package: "db"
+        out: "../../apps/api/internal/db"
         sql_package: "pgx/v5"
         emit_json_tags: true
         emit_pointers_for_null_types: true
         emit_interface: true
+        emit_empty_slices: true
+        emit_methods_with_db_argument: false
+        # Query methods are generated on *Queries; transactions are handled
+        # explicitly in internal/store via Queries.WithTx(...) — no hidden magic.
         overrides:
           - db_type: "uuid"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
+          - db_type: "citext"
+            go_type:
+              type: "string"

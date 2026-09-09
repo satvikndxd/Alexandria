@@ -1,4 +1,4 @@
-// Alexandria API — the modular monolith's HTTP entrypoint.
+// Command api is the modular monolith's HTTP entrypoint.
 package main
 
 import (
@@ -9,9 +9,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alexandria-reads/alexandria/apps/api/internal/auth"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/config"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/events"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/httpapi"
+	"github.com/alexandria-reads/alexandria/apps/api/internal/search"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/store"
 )
 
@@ -31,7 +33,26 @@ func main() {
 	defer pool.Close()
 	st := store.New(pool)
 
-	// NATS is optional at boot (the outbox buffers events), mandatory for ingestion.
+	authSvc, err := auth.NewService(st, cfg.WebAuthnRPID, cfg.WebAuthnRPDisplayName,
+		cfg.WebAuthnOrigins, cfg.SessionSecureCookie)
+	if err != nil {
+		slog.Error("webauthn setup failed", "err", err)
+		os.Exit(1)
+	}
+	magic := auth.NewMagicLinks(st, cfg.WebOrigin, cfg.SessionSecureCookie)
+
+	var sc *search.Client
+	if cfg.MeiliURL != "" {
+		sc = search.New(cfg.MeiliURL, cfg.MeiliKey)
+		if err := sc.EnsureIndexes(ctx); err != nil {
+			// Search is derived state: boot without it rather than refuse to
+			// serve. The degraded path answers from Postgres.
+			slog.Warn("meilisearch unavailable; search degrades to postgres", "err", err)
+		}
+	}
+
+	// NATS is optional at boot: the outbox buffers events until the bus
+	// returns, which is precisely why ingestion is event-driven.
 	if bus, err := events.Connect(cfg.NATSURL); err != nil {
 		slog.Warn("nats unavailable; outbox will buffer events", "err", err)
 	} else {
@@ -42,9 +63,28 @@ func main() {
 		go events.RunOutboxRelay(ctx, outboxAdapter{st}, bus, 2*time.Second)
 	}
 
-	if err := httpapi.New(cfg, st).Run(ctx); err != nil {
+	// Housekeeping: ceremonies and dead sessions expire on their own, but the
+	// rows need pruning to keep the lookup indexes tight.
+	go pruneLoop(ctx, st, time.Hour)
+
+	if err := httpapi.New(cfg, st, authSvc, magic, sc).Run(ctx); err != nil {
 		slog.Error("server exited", "err", err)
 		os.Exit(1)
+	}
+}
+
+func pruneLoop(ctx context.Context, st *store.Store, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := st.PruneStaleAuth(ctx); err != nil {
+				slog.Warn("auth pruning failed", "err", err)
+			}
+		}
 	}
 }
 

@@ -1,262 +1,202 @@
-// Package store is the explicit-SQL data layer (pgx/v5, no ORM).
+// Package store is the data-access layer of the modular monolith.
 //
-// The SQL here mirrors packages/db/queries/*.sql — the source of truth for
-// contributors regenerating via sqlc (`cd packages/db && sqlc generate`).
-// Methods are kept hand-tuned and reviewed: every query is visible, every
-// index it relies on is documented in the migrations.
+// Every query in the system is written once, as SQL, in packages/db/queries and
+// compiled to type-safe Go by sqlc into internal/db. This package adds exactly
+// three things on top:
+//
+//  1. connection/pool lifecycle with production-shaped defaults
+//  2. transaction helpers that set the Row-Level-Security context
+//     (app.user_id / app.service) with SET LOCAL so it cannot leak between
+//     pooled connections
+//  3. multi-statement domain operations (review + ledger, registration +
+//     shelves, ingest job + outbox) that must be atomic
+//
+// There is no ORM and no query builder: if a query is not visible in SQL, it
+// does not ship.
 package store
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alexandria-reads/alexandria/apps/api/internal/db"
 )
+
+// ErrNotFound is returned when a lookup misses; handlers map it to 404.
+var ErrNotFound = errors.New("not found")
+
+// ErrSelfAction rejects operations that target the actor's own account
+// (following yourself, blocking yourself): meaningless, and a classic source
+// of graph cycles that feed logic then has to defend against.
+var ErrSelfAction = errors.New("you cannot target your own account with this action")
+
+// ErrBlocked rejects social operations across a block edge in either
+// direction. A block is not an invitation to be replied to.
+var ErrBlocked = errors.New("this interaction is not permitted")
 
 type Store struct {
 	pool *pgxpool.Pool
+	q    *db.Queries
 }
 
-func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+func New(pool *pgxpool.Pool) *Store {
+	return &Store{pool: pool, q: db.New(pool)}
+}
+
+// Queries exposes the generated query set for single-statement operations.
+func (s *Store) Queries() *db.Queries { return s.q }
+
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 // Connect opens a pool with conservative, production-shaped settings.
 func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = 16
+	cfg.MinConns = 1
 	cfg.MaxConnLifetime = 30 * time.Minute
+	cfg.MaxConnIdleTime = 5 * time.Minute
 	cfg.HealthCheckPeriod = 30 * time.Second
 	return pgxpool.NewWithConfig(ctx, cfg)
 }
 
-// ---- Bibliography -----------------------------------------------------------
-
-type Work struct {
-	ID             uuid.UUID       `json:"id"`
-	Slug           string          `json:"slug"`
-	Title          string          `json:"title"`
-	Subtitle       *string         `json:"subtitle"`
-	FirstPublished *int32          `json:"first_published"`
-	Description    string          `json:"description"`
-	IsPublicDomain bool            `json:"is_public_domain"`
-	RatingSum      int64           `json:"-"`
-	RatingCount    int64           `json:"rating_count"`
-	Authors        json.RawMessage `json:"authors"`
+// Tx runs fn inside a transaction as the service context. Use it for writes
+// that are not scoped to a single reader (ingestion, moderation, public reads).
+func (s *Store) Tx(ctx context.Context, fn func(q *db.Queries) error) error {
+	return s.tx(ctx, nil, false, fn)
 }
 
-// AverageRating returns half-star average (e.g. 4.5) or 0 when unrated.
-func (w Work) AverageRating() float64 {
-	if w.RatingCount == 0 {
-		return 0
+// TxUser runs fn inside a transaction with Row-Level Security scoped to
+// userID. This is the ONLY way request-path code should touch RLS-covered
+// tables (shelves, shelf_items, reading_sessions, annotations, notifications).
+func (s *Store) TxUser(ctx context.Context, userID uuid.UUID, fn func(q *db.Queries) error) error {
+	return s.tx(ctx, &userID, false, fn)
+}
+
+// ReadUser scopes a read-only transaction to a reader. Same guarantees as
+// TxUser without a write intent.
+func (s *Store) ReadUser(ctx context.Context, userID uuid.UUID, fn func(q *db.Queries) error) error {
+	return s.tx(ctx, &userID, true, fn)
+}
+
+func (s *Store) tx(ctx context.Context, userID *uuid.UUID, readOnly bool, fn func(q *db.Queries) error) error {
+	opts := pgx.TxOptions{}
+	if readOnly {
+		opts.AccessMode = pgx.ReadOnly
 	}
-	return float64(w.RatingSum) / float64(w.RatingCount) / 2.0
-}
-
-func (s *Store) GetWorkBySlug(ctx context.Context, slug string) (*Work, error) {
-	const q = `
-SELECT w.id, w.slug, w.title, w.subtitle, w.first_published, w.description,
-       w.is_public_domain, w.rating_sum, w.rating_count,
-       (SELECT coalesce(json_agg(json_build_object('id', a.id, 'name', a.name, 'role', wa.role) ORDER BY wa.position), '[]')
-          FROM work_authors wa JOIN authors a ON a.id = wa.author_id
-         WHERE wa.work_id = w.id) AS authors
-  FROM works w
- WHERE w.slug = $1 AND w.deleted_at IS NULL`
-	var w Work
-	err := s.pool.QueryRow(ctx, q, slug).Scan(
-		&w.ID, &w.Slug, &w.Title, &w.Subtitle, &w.FirstPublished, &w.Description,
-		&w.IsPublicDomain, &w.RatingSum, &w.RatingCount, &w.Authors)
+	tx, err := s.pool.BeginTx(ctx, opts)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("begin tx: %w", err)
 	}
-	return &w, nil
-}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after a successful commit
 
-type Edition struct {
-	ID          uuid.UUID       `json:"id"`
-	WorkID      uuid.UUID       `json:"work_id"`
-	Title       string          `json:"title"`
-	ISBN13      *string         `json:"isbn13"`
-	Format      string          `json:"format"`
-	Publisher   *string         `json:"publisher"`
-	Language    string          `json:"language"`
-	PageCount   *int32          `json:"page_count"`
-	GutenbergID *int32          `json:"gutenberg_id"`
-	Metadata    json.RawMessage `json:"metadata"`
-}
+	qtx := s.q.WithTx(tx)
 
-func (s *Store) ListEditionsForWork(ctx context.Context, workID uuid.UUID) ([]Edition, error) {
-	const q = `
-SELECT id, work_id, title, isbn13, format, publisher, language, page_count, gutenberg_id, metadata
-  FROM editions
- WHERE work_id = $1 AND deleted_at IS NULL
- ORDER BY published_on DESC NULLS LAST`
-	rows, err := s.pool.Query(ctx, q, workID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Edition
-	for rows.Next() {
-		var e Edition
-		if err := rows.Scan(&e.ID, &e.WorkID, &e.Title, &e.ISBN13, &e.Format,
-			&e.Publisher, &e.Language, &e.PageCount, &e.GutenbergID, &e.Metadata); err != nil {
-			return nil, err
+	// SET LOCAL dies with the transaction: a pooled connection returned to the
+	// pool can never carry the previous tenant's identity.
+	if userID != nil {
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.user_id', $1, true)", userID.String()); err != nil {
+			return fmt.Errorf("set rls user context: %w", err)
 		}
-		out = append(out, e)
-	}
-	return out, rows.Err()
-}
-
-// ---- Reviews ----------------------------------------------------------------
-
-type Review struct {
-	ID          uuid.UUID `json:"id"`
-	UserID      uuid.UUID `json:"user_id"`
-	Username    string    `json:"username"`
-	WorkID      uuid.UUID `json:"work_id"`
-	Rating      int16     `json:"rating"` // half-stars 1..10
-	Title       string    `json:"title"`
-	Body        string    `json:"body"`
-	HasSpoilers bool      `json:"has_spoilers"`
-	LikeCount   int32     `json:"like_count"`
-	CreatedAt   time.Time `json:"created_at"`
-}
-
-type CreateReviewParams struct {
-	UserID      uuid.UUID
-	WorkID      uuid.UUID
-	EditionID   *uuid.UUID
-	Rating      int16
-	Title       string
-	Body        string
-	HasSpoilers bool
-	PromptWhy   string
-}
-
-// CreateReview inserts the review and its contribution-ledger row atomically,
-// so posting caps can never drift from actual content.
-func (s *Store) CreateReview(ctx context.Context, p CreateReviewParams) (*Review, error) {
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	const q = `
-INSERT INTO reviews (user_id, work_id, edition_id, rating, title, body, has_spoilers, prompt_why)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, created_at`
-	var r Review
-	r.UserID, r.WorkID, r.Rating, r.Title, r.Body, r.HasSpoilers =
-		p.UserID, p.WorkID, p.Rating, p.Title, p.Body, p.HasSpoilers
-	if err := tx.QueryRow(ctx, q, p.UserID, p.WorkID, p.EditionID, p.Rating,
-		p.Title, p.Body, p.HasSpoilers, p.PromptWhy).Scan(&r.ID, &r.CreatedAt); err != nil {
-		return nil, err
-	}
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO contribution_ledger (user_id, kind) VALUES ($1, 'review')`, p.UserID); err != nil {
-		return nil, err
-	}
-	return &r, tx.Commit(ctx)
-}
-
-func (s *Store) ListReviewsForWork(ctx context.Context, workID uuid.UUID, limit, offset int32) ([]Review, error) {
-	const q = `
-SELECT r.id, r.user_id, u.username, r.work_id, r.rating, r.title, r.body,
-       r.has_spoilers, r.like_count, r.created_at
-  FROM reviews r JOIN users u ON u.id = r.user_id
- WHERE r.work_id = $1 AND r.deleted_at IS NULL
- ORDER BY r.created_at DESC
- LIMIT $2 OFFSET $3`
-	rows, err := s.pool.Query(ctx, q, workID, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Review
-	for rows.Next() {
-		var r Review
-		if err := rows.Scan(&r.ID, &r.UserID, &r.Username, &r.WorkID, &r.Rating,
-			&r.Title, &r.Body, &r.HasSpoilers, &r.LikeCount, &r.CreatedAt); err != nil {
-			return nil, err
+	} else {
+		// Explicitly clear any inherited value; paranoia is cheap here.
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.user_id', '', true), set_config('app.service', 'on', true)"); err != nil {
+			return fmt.Errorf("set service context: %w", err)
 		}
-		out = append(out, r)
 	}
-	return out, rows.Err()
-}
 
-// CountRecentReviews counts a user's reviews in the trailing window (posting cap).
-func (s *Store) CountRecentReviews(ctx context.Context, userID uuid.UUID, window time.Duration) (int, error) {
-	var n int
-	err := s.pool.QueryRow(ctx,
-		`SELECT count(*) FROM contribution_ledger
-		  WHERE user_id = $1 AND kind = 'review' AND created_at > now() - $2::interval`,
-		userID, window.String()).Scan(&n)
-	return n, err
-}
-
-func (s *Store) GetUserReputation(ctx context.Context, userID uuid.UUID) (int, error) {
-	var rep int
-	err := s.pool.QueryRow(ctx, `SELECT reputation FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&rep)
-	return rep, err
-}
-
-// ---- Outbox (event-driven ingestion) ---------------------------------------
-
-type OutboxRow struct {
-	ID      int64
-	Subject string
-	Payload json.RawMessage
-}
-
-// EnqueueIngest writes an ingest job and its event to the outbox in one tx.
-func (s *Store) EnqueueIngest(ctx context.Context, kind, idemKey string, payload any) error {
-	body, err := json.Marshal(payload)
-	if err != nil {
+	if err := fn(qtx); err != nil {
 		return err
 	}
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return err
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
-
-	if _, err := tx.Exec(ctx, `
-INSERT INTO ingest_jobs (kind, idem_key, payload) VALUES ($1, $2, $3)
-ON CONFLICT (idem_key) DO NOTHING`, kind, idemKey, body); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO outbox (subject, payload) VALUES ($1, $2)`,
-		"ingest."+kind, body); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return nil
 }
 
-func (s *Store) OutboxPeek(ctx context.Context, limit int32) ([]OutboxRow, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, subject, payload FROM outbox ORDER BY id LIMIT $1`, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []OutboxRow
-	for rows.Next() {
-		var r OutboxRow
-		if err := rows.Scan(&r.ID, &r.Subject, &r.Payload); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
+// ---- pgtype helpers ---------------------------------------------------------
+// Nullable Postgres types are pgtype wrappers in the generated code. These
+// conversions keep the rest of the codebase in plain Go types.
+
+func TS(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: t.UTC(), Valid: !t.IsZero()}
 }
 
-func (s *Store) OutboxDelete(ctx context.Context, ids []int64) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM outbox WHERE id = ANY($1)`, ids)
-	return err
+func TSPtr(t *time.Time) pgtype.Timestamptz {
+	if t == nil || t.IsZero() {
+		return pgtype.Timestamptz{}
+	}
+	return TS(*t)
+}
+
+func TSGet(v pgtype.Timestamptz) *time.Time {
+	if !v.Valid {
+		return nil
+	}
+	t := v.Time.UTC()
+	return &t
+}
+
+func UUIDPtr(u *uuid.UUID) pgtype.UUID {
+	if u == nil {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: [16]byte(*u), Valid: true}
+}
+
+func UUIDGet(v pgtype.UUID) *uuid.UUID {
+	if !v.Valid {
+		return nil
+	}
+	u := uuid.UUID(v.Bytes)
+	return &u
+}
+
+func I32Ptr(v *int32) pgtype.Int4 {
+	if v == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: *v, Valid: true}
+}
+
+func I32Narg(v *int32) pgtype.Int4 { return I32Ptr(v) }
+
+func DatePtr(d *time.Time) pgtype.Date {
+	if d == nil || d.IsZero() {
+		return pgtype.Date{}
+	}
+	return pgtype.Date{Time: d.UTC(), Valid: true}
+}
+
+func DateGet(v pgtype.Date) *time.Time {
+	if !v.Valid {
+		return nil
+	}
+	t := v.Time.UTC()
+	return &t
+}
+
+// Narg converts an optional string to the nullable shape sqlc generated for
+// sqlc.narg parameters.
+func Str(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+func StrGet(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
 }

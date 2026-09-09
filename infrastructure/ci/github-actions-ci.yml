@@ -5,9 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   api:
-    name: Go API — vet & test
+    name: Go API — fmt, vet, build, unit tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -16,29 +20,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
-          cache-dependency-path: apps/api/go.sum
-      - run: gofmt -l . && test -z "$(gofmt -l .)"
+          go-version: "1.24"
+          cache-dependency-path: |
+            apps/api/go.sum
+            packages/db/go.mod
+      - name: gofmt (no diffs)
+        run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go build ./...
-      - run: go test -race ./...
+      - name: Unit tests (no services required)
+        run: go test -race ./internal/domain/... ./internal/auth/... ./internal/ratelimit/... ./internal/migrate/...
 
-  web:
-    name: Web — typecheck & build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-      - run: npm ci
-      - run: npx tsc --noEmit
-        working-directory: apps/web
-      - run: npm run build --workspace @alexandria/web
-
-  migrations:
-    name: Postgres — migrations apply cleanly
+  integration:
+    name: Go API — integration suite against real Postgres 16
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -55,9 +49,74 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
-      - name: Apply migrations in order
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: apps/api/go.sum
+      - name: Apply migrations through the real runner
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgres://alexandria:alexandria@localhost:5432/alexandria?sslmode=disable
         run: |
-          for f in packages/db/migrations/*.sql; do
-            echo "== $f"
-            PGPASSWORD=alexandria psql -h localhost -U alexandria -d alexandria -v ON_ERROR_STOP=1 -f "$f"
-          done
+          go run ./cmd/migrate up
+          go run ./cmd/migrate status
+      - name: Provision the least-privilege application role
+        run: |
+          psql -h localhost -U alexandria -d alexandria -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'alexandria_app') THEN
+              CREATE ROLE alexandria_app LOGIN PASSWORD 'alexandria_app';
+            END IF;
+          END $$;
+          GRANT ALL ON DATABASE alexandria TO alexandria_app;
+          SQL
+        env:
+          PGPASSWORD: alexandria
+      - name: Integration tests (RLS, friction, CSRF, spoiler gating)
+        working-directory: apps/api
+        env:
+          ALEXANDRIA_TEST_DATABASE_URL: postgres://alexandria:alexandria@localhost:5432/alexandria?sslmode=disable
+        run: go test -race -count=1 ./internal/httpapi/...
+
+  sqlc:
+    name: sqlc — generated data layer matches the checked-in code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sqlc-dev/setup-sqlc@v1
+        with:
+          sqlc-version: "1.27.0"
+      - name: Regenerate and fail on drift
+        run: |
+          cd packages/db && sqlc generate && cd -
+          git diff --exit-code -- apps/api/internal/db
+        # Drift means a contributor edited queries/ or migrations/ without
+        # regenerating: the shipped code would not match the shipped SQL.
+
+  web:
+    name: Web — typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+        working-directory: apps/web
+      - run: npm run build --workspace @alexandria/web
+
+  mobile:
+    name: Flutter — analyze & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - working-directory: apps/mobile
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter test

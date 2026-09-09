@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -32,6 +33,25 @@ type Config struct {
 	S3SecretKey string
 	S3Bucket    string
 
+	// Outbound email (empty SMTP host ⇒ log transport)
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
+
+	// Project Gutenberg official offline catalog
+	GutenbergCatalogURL string
+
+	// Identity / WebAuthn
+	WebAuthnRPID          string // relying-party ID, e.g. alexandria.example
+	WebAuthnRPDisplayName string
+	WebAuthnOrigins       []string // fully-qualified origins permitted to assert
+	WebOrigin             string   // absolute origin used in magic-link emails
+	SessionSecureCookie   bool     // Secure attribute; true behind TLS
+	SessionPepper         string   // HMAC pepper for CSRF + throttle buckets
+	TrustProxy            bool     // trust X-Forwarded-For (set only behind our own edge)
+
 	// Anti-slop friction knobs (overridable for tests, never disabled in prod)
 	ReviewMinChars    int
 	NewAccountDaily   int // reviews/day for accounts below the reputation gate
@@ -54,6 +74,23 @@ func Load() Config {
 		S3SecretKey: getenv("S3_SECRET_KEY", "alexandria-dev"),
 		S3Bucket:    getenv("S3_BUCKET", "alexandria"),
 
+		SMTPHost:     getenv("SMTP_HOST", ""),
+		SMTPPort:     getenv("SMTP_PORT", "587"),
+		SMTPUsername: getenv("SMTP_USERNAME", ""),
+		SMTPPassword: getenv("SMTP_PASSWORD", ""),
+		SMTPFrom:     getenv("SMTP_FROM", "Alexandria <noreply@alexandria.example>"),
+
+		GutenbergCatalogURL: getenv("GUTENBERG_CATALOG_URL",
+			"https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv.gz"),
+
+		WebAuthnRPID:          getenv("WEBAUTHN_RP_ID", "localhost"),
+		WebAuthnRPDisplayName: getenv("WEBAUTHN_RP_NAME", "Alexandria"),
+		WebAuthnOrigins:       splitList(getenv("WEBAUTHN_RP_ORIGINS", "http://localhost:3000")),
+		WebOrigin:             getenv("WEB_ORIGIN", "http://localhost:3000"),
+		SessionSecureCookie:   getenv("SESSION_SECURE_COOKIE", "false") == "true",
+		SessionPepper:         getenv("SESSION_PEPPER", "alexandria-dev-pepper-change-me"),
+		TrustProxy:            getenv("TRUST_PROXY", "false") == "true",
+
 		ReviewMinChars:    getint("FRICTION_REVIEW_MIN_CHARS", 150),
 		NewAccountDaily:   getint("FRICTION_NEW_ACCOUNT_DAILY_REVIEWS", 2),
 		TrustedDaily:      getint("FRICTION_TRUSTED_DAILY_REVIEWS", 10),
@@ -75,6 +112,20 @@ func getint(key string, def int) int {
 		}
 	}
 	return def
+}
+
+func splitList(v string) []string {
+	if strings.TrimSpace(v) == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getdur(key string, def time.Duration) time.Duration {
