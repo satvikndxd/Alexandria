@@ -64,6 +64,18 @@ npm run dev --workspace @alexandria/web   # http://localhost:3000
 Without `ALEXANDRIA_API_URL` the web app renders seeded public-domain
 fixtures, so UI work needs no backend.
 
+The web app is the edge (BFF): browser traffic reaches the monolith through
+same-origin rewrites (`/api/v1/*` → `ALEXANDRIA_API_URL/v1/*`), so session and
+CSRF cookies stay first-party and there is no CORS anywhere. **Next bakes
+rewrites into the routes manifest at build time**, so set `ALEXANDRIA_API_URL`
+for `next build` too, not only at runtime.
+
+End-to-end smoke (auth → CSRF → library → SSR), no browser needed:
+
+```sh
+python3 infrastructure/smoke/e2e_smoke.py   # needs psycopg2-binary + running stack
+```
+
 ## 5 · Mobile
 
 ```sh

@@ -244,7 +244,15 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		respondStoreError(w, err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]any{"stats": stats, "shelves": counts})
+	life, err := s.store.ReadingLife(r.Context(), sess.UserID)
+	if err != nil {
+		respondStoreError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"stats": stats, "shelves": counts,
+		"year": life.Year, "streak_days": life.StreakDays, "streak_cells": life.StreakCells,
+	})
 }
 
 // ---- annotations (reader highlights & notes) -------------------------------------------------
@@ -288,9 +296,23 @@ func (s *Server) handleCreateAnnotation(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleListAnnotations(w http.ResponseWriter, r *http.Request) {
 	sess, _ := CurrentUser(r)
+	limit, offset := paginate(r, 50, 200)
+	// Without an edition filter the page shows the reader's whole margin:
+	// every note across every edition, RLS-scoped to them alone.
+	if raw := r.URL.Query().Get("edition_id"); raw == "" {
+		anns, err := s.store.Queries().ListAnnotationsForUser(r.Context(), db.ListAnnotationsForUserParams{
+			UserID: sess.UserID, Lim: limit, Off: offset,
+		})
+		if err != nil {
+			respondStoreError(w, err)
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]any{"annotations": anns})
+		return
+	}
 	edition, err := uuid.Parse(r.URL.Query().Get("edition_id"))
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "bad_id", "edition_id is required.")
+		respondError(w, http.StatusBadRequest, "bad_id", "Malformed edition_id.")
 		return
 	}
 	anns, err := s.store.ListAnnotations(r.Context(), sess.UserID, edition, queryInt32(r, "chapter_idx"))

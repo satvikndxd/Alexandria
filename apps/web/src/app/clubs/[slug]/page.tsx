@@ -1,71 +1,146 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { clubs, getClub, getWork } from "@/lib/data";
-import { SectionHeading } from "@/components/Ornament";
-import { WoodcutCover } from "@/components/WoodcutCover";
+import { PageFrame } from "@/components/frame/PageFrame";
+import { TempleEmblem } from "@/components/Engravings";
+import { me, requestCookie } from "@/lib/session";
+import { tryGet } from "@/lib/api";
+import { listClubs, relativeWhen } from "@/lib/content";
+import { getClub } from "@/lib/data";
 
-export function generateStaticParams() {
-  return clubs.map((c) => ({ slug: c.slug }));
-}
+export const dynamic = "force-dynamic";
 
-export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
-  return { title: getClub(params.slug)?.name ?? "Club" };
-}
+type Channel = { id: string; kind: string; name: string; topic: string; spoiler_threshold_bp: number | null; viewer_progress_bp: number };
+type Message = { id: string; username: string; body: string; has_spoilers: boolean; created_at: string };
 
-const KIND_GLYPH: Record<string, string> = { text: "#", voice: "♬", video: "▣", announcements: "!" };
+/**
+ * A club room: channels down the left, messages in the folio. Spoiler-gated
+ * channels refuse readers below the threshold — the API returns 403 and this
+ * page renders the door, closed, with the reason on it.
+ */
+export default async function ClubPage({
+  params,
+  searchParams,
+}: {
+  params: { slug: string };
+  searchParams: { ch?: string };
+}) {
+  const cookie = requestCookie();
+  const session = await me();
 
-export default function ClubPage({ params }: { params: { slug: string } }) {
-  const club = getClub(params.slug);
-  if (!club) notFound();
-  const current = getWork(club.currentRead);
+  const club =
+    (await tryGet<{ club: { slug: string; name: string; description: string; member_count: number }; current_read: { work_title?: string } | null }>(
+      `/v1/clubs/${params.slug}`,
+      { cookie },
+    ))?.club ?? null;
+
+  if (!club) {
+    const fixture = getClub(params.slug);
+    if (!fixture) notFound();
+    return (
+      <PageFrame pathname="/clubs" epigraph="A book club is a conspiracy of readers." attribution="Alexandria">
+        <h1 className="section-title !text-[1.7rem]">{fixture.name}</h1>
+        <p className="pullquote mt-3 max-w-[62ch]">{fixture.description}</p>
+        <ul className="mt-6 flex flex-col gap-2">
+          {fixture.channels.map((ch) => (
+            <li key={ch.name} className="hairline py-2 text-[0.95rem] text-ink-soft">
+              <span className="engraved-label mr-3">{ch.kind}</span>
+              {ch.name}
+              {ch.gated ? <span className="ml-2 text-xs text-vermilion">{ch.gated}</span> : null}
+            </li>
+          ))}
+        </ul>
+        <p className="engraved-label mt-6">Demonstration seed — start the API to enter live rooms.</p>
+      </PageFrame>
+    );
+  }
+
+  const channels =
+    (await tryGet<{ channels: Channel[] }>(`/v1/clubs/${params.slug}/channels`, { cookie }))?.channels ?? [];
+  const activeId = searchParams.ch ?? channels[0]?.id ?? "";
+  const active = channels.find((c) => c.id === activeId);
+
+  let messages: Message[] = [];
+  let gated: { blocked: boolean; reason?: string } = { blocked: false };
+  if (active) {
+    const res = await tryGet<{ messages: Message[] }>(`/v1/channels/${active.id}/messages?limit=50`, { cookie });
+    if (res?.messages) messages = res.messages;
+    else gated = { blocked: true, reason: "This door opens further into the book." };
+  }
 
   return (
-    <div className="space-y-10">
-      <SectionHeading caption={`${club.members} members`} title={club.name} />
-      <p className="max-w-2xl text-[0.97rem] leading-relaxed text-ink-soft">{club.description}</p>
+    <PageFrame pathname="/clubs" epigraph="A book club is a conspiracy of readers." attribution="Alexandria">
+      <header className="flex items-start gap-4">
+        <span className="medallion h-14 w-14 shrink-0 text-ink">
+          <TempleEmblem className="h-14 w-14" />
+        </span>
+        <div>
+          <h1 className="section-title !text-[1.7rem]">{club.name}</h1>
+          <p className="mt-1 max-w-[62ch] text-[0.98rem] text-ink-soft">{club.description}</p>
+          <p className="engraved-label mt-2">{Number(club.member_count)} members</p>
+        </div>
+      </header>
 
-      <div className="grid gap-8 md:grid-cols-[1fr_260px]">
-        {/* Channels */}
-        <section aria-label="Channels">
-          <p className="engraved-label mb-3">Rooms</p>
-          <ul className="divide-y divide-ink/30 border-2 border-ink bg-parchment-light">
-            {club.channels.map((ch) => (
-              <li key={ch.name} className="flex items-center justify-between gap-3 px-4 py-3">
-                <span className="flex items-center gap-3">
-                  <span aria-hidden className="w-5 text-center font-body text-botanical">
-                    {KIND_GLYPH[ch.kind]}
-                  </span>
-                  <span className={`font-body ${ch.kind === "text" ? "" : "italic"} text-ink`}>{ch.name}</span>
-                </span>
-                {ch.gated ? (
-                  <span className="border border-vermilion px-2 py-0.5 text-[0.6rem] uppercase tracking-engraved text-vermilion">
-                    {ch.gated}
-                  </span>
-                ) : (
-                  <span className="text-[0.6rem] uppercase tracking-engraved text-ink-faint">{ch.kind}</span>
-                )}
+      <div className="mt-8 grid gap-8 lg:grid-cols-[210px_minmax(0,1fr)]">
+        <nav aria-label="Channels">
+          <ul className="flex flex-col gap-1">
+            {channels.map((ch) => (
+              <li key={ch.id}>
+                <Link
+                  href={`/clubs/${params.slug}?ch=${ch.id}`}
+                  className={`rail-link !px-3 !py-2 !text-[0.9rem] ${ch.id === activeId ? "" : ""}`}
+                  aria-current={ch.id === activeId ? "page" : undefined}
+                >
+                  <span className="engraved-label w-10 shrink-0">{ch.kind === "text" ? "#" : ch.kind === "voice" ? "♪" : "▶"}</span>
+                  <span className="truncate">{ch.name}</span>
+                  {ch.spoiler_threshold_bp != null ? <span className="ml-auto text-xs text-vermilion" title="Spoiler-gated">◈</span> : null}
+                </Link>
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-xs italic leading-relaxed text-ink-faint">
-            Spoiler-gated rooms unlock automatically as your reading progress on the current book
-            passes each threshold. Voice and video rooms are LiveKit-backed in the full deployment.
+          <p className="mt-4 text-xs leading-relaxed text-ink-faint">
+            Voice and video rooms open in Phase 4 (LiveKit). Gated channels stay closed until your
+            progress passes their threshold.
           </p>
-        </section>
+        </nav>
 
-        {/* Current read */}
-        {current && (
-          <aside aria-label="Current read">
-            <p className="engraved-label mb-3">Currently reading</p>
-            <Link href={`/books/${current.slug}`} className="block">
-              <WoodcutCover work={current} className="shadow-block" />
-            </Link>
-            <p className="mt-3 text-center font-body font-semibold text-ink">{current.title}</p>
-            <p className="text-center text-sm italic text-ink-faint">{current.author.name}</p>
-          </aside>
-        )}
+        <section aria-label={active ? `Messages in ${active.name}` : "Messages"}>
+          {gated.blocked ? (
+            <div className="panel px-6 py-8 text-center">
+              <p className="engraved-label !text-vermilion">Spoiler gate</p>
+              <p className="pullquote mt-3 max-w-[46ch] mx-auto">
+                {gated.reason} Alexandria protects endings: this channel opens when your reading
+                progress passes its threshold.
+              </p>
+            </div>
+          ) : (
+            <ul className="flex flex-col">
+              {messages.length === 0 ? (
+                <li className="pullquote">Quiet room. Say the first thing the chapter made you feel.</li>
+              ) : (
+                messages.map((m) => (
+                  <li key={m.id} className="hairline py-3 first:border-t-0">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="font-semibold text-ink">{m.username}</span>
+                      <span className="text-xs text-ink-faint">{relativeWhen(m.created_at)}</span>
+                    </div>
+                    <p className={`mt-1 text-[0.97rem] leading-relaxed text-ink-soft ${m.has_spoilers ? "spoiler-veil" : ""}`}>
+                      {m.body}
+                    </p>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+          {!session.authenticated ? (
+            <p className="engraved-label mt-5">
+              <Link href="/signin" className="underline">
+                Sign in
+              </Link>{" "}
+              to post in this room.
+            </p>
+          ) : null}
+        </section>
       </div>
-    </div>
+    </PageFrame>
   );
 }

@@ -202,7 +202,14 @@ type Querier interface {
 	LinkWorkAuthor(ctx context.Context, arg LinkWorkAuthorParams) error
 	LinkWorkSubject(ctx context.Context, arg LinkWorkSubjectParams) error
 	ListActiveSuspensions(ctx context.Context) ([]ListActiveSuspensionsRow, error)
+	// Distinct days on which the reader touched a session, note, or review.
+	// The streak is computed in Go so the rule ("consecutive, today or yesterday
+	// anchored") lives in one testable place instead of in SQL date arithmetic.
+	ListActivityDays(ctx context.Context, arg ListActivityDaysParams) ([]pgtype.Date, error)
 	ListAnnotationsForEdition(ctx context.Context, arg ListAnnotationsForEditionParams) ([]Annotation, error)
+	// The reader's margin notes across every edition, for the Notes page.
+	// RLS-scoped like all annotation reads: only the caller's rows can appear.
+	ListAnnotationsForUser(ctx context.Context, arg ListAnnotationsForUserParams) ([]ListAnnotationsForUserRow, error)
 	ListAuthorsForWork(ctx context.Context, workID uuid.UUID) ([]ListAuthorsForWorkRow, error)
 	ListBlockedUsers(ctx context.Context, userID uuid.UUID) ([]ListBlockedUsersRow, error)
 	ListChannelsForClub(ctx context.Context, arg ListChannelsForClubParams) ([]ListChannelsForClubRow, error)
@@ -387,6 +394,11 @@ type Querier interface {
 	// which keeps sqlc's types honest instead of smuggling strings through SQL.
 	WorkSearchDocuments(ctx context.Context, arg WorkSearchDocumentsParams) ([]WorkSearchDocumentsRow, error)
 	WorkSlugIsTaken(ctx context.Context, slug string) (bool, error)
+	// ---- reading-life projections (right rail) -----------------------------------
+	// These exist so the UI never has to invent a number: every figure on the
+	// reader's right rail is derived from their own sessions, annotations and
+	// reviews, and shows zero when there is genuinely nothing yet.
+	YearStatsForUser(ctx context.Context, arg YearStatsForUserParams) (YearStatsForUserRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

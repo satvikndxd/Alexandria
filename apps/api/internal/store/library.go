@@ -367,3 +367,84 @@ func (s *Store) DeleteAnnotation(ctx context.Context, userID, id uuid.UUID) erro
 		return nil
 	})
 }
+
+// ---- reading-life projection (the right rail) ---------------------------------
+// Every figure the rail shows is derived from the reader's own sessions,
+// annotations and reviews. When there is genuinely nothing yet, the numbers
+// are zero — the UI never invents a streak or a page count.
+
+type ReadingLife struct {
+	Year       db.YearStatsForUserRow `json:"year"`
+	StreakDays int                    `json:"streak_days"`
+	// StreakCells renders the last 14 days for the rail's square calendar:
+	// "filled" | "empty" | "today".
+	StreakCells []string `json:"streak_cells"`
+}
+
+// ReadingLife computes year totals and the current streak. The streak rule —
+// consecutive days, anchored at today or yesterday so a reader who slept in
+// isn't punished at breakfast — lives here, in Go, where it can be unit
+// tested, rather than in SQL date arithmetic.
+func (s *Store) ReadingLife(ctx context.Context, userID uuid.UUID) (*ReadingLife, error) {
+	year, err := s.q.YearStatsForUser(ctx, db.YearStatsForUserParams{
+		UserID: userID, Year: int32(time.Now().Year()),
+	})
+	if err != nil {
+		return nil, err
+	}
+	days, err := s.q.ListActivityDays(ctx, db.ListActivityDaysParams{UserID: userID, Lim: 400})
+	if err != nil {
+		return nil, err
+	}
+	active := make(map[time.Time]bool, len(days))
+	for _, d := range days {
+		if d.Valid {
+			active[dayKey(d.Time)] = true
+		}
+	}
+	life := &ReadingLife{Year: year, StreakDays: streakFrom(active, time.Now())}
+	life.StreakCells = streakCells(active, time.Now(), 14)
+	return life, nil
+}
+
+func dayKey(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func streakFrom(active map[time.Time]bool, now time.Time) int {
+	today := dayKey(now)
+	cursor := today
+	if !active[cursor] {
+		cursor = cursor.AddDate(0, 0, -1) // grace: yesterday still counts this morning
+		if !active[cursor] {
+			return 0
+		}
+	}
+	n := 0
+	for active[cursor] {
+		n++
+		cursor = cursor.AddDate(0, 0, -1)
+	}
+	return n
+}
+
+func streakCells(active map[time.Time]bool, now time.Time, n int) []string {
+	today := dayKey(now)
+	cells := make([]string, 0, n)
+	for i := n - 1; i >= 0; i-- {
+		d := today.AddDate(0, 0, -i)
+		switch {
+		case i == 0:
+			if active[d] {
+				cells = append(cells, "today")
+			} else {
+				cells = append(cells, "empty")
+			}
+		case active[d]:
+			cells = append(cells, "filled")
+		default:
+			cells = append(cells, "empty")
+		}
+	}
+	return cells
+}

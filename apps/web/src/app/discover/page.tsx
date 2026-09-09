@@ -1,40 +1,60 @@
-import type { Metadata } from "next";
-import { works } from "@/lib/data";
-import { SectionHeading } from "@/components/Ornament";
-import { BookCard } from "@/components/BookCard";
+import Link from "next/link";
+import { PageFrame } from "@/components/frame/PageFrame";
+import { BookCard } from "@/components/books/BookCard";
+import { requestCookie } from "@/lib/session";
+import { tryGet } from "@/lib/api";
+import { listWorks } from "@/lib/content";
+import { works as fixtures } from "@/lib/data";
 
-export const metadata: Metadata = { title: "Discover" };
+export const dynamic = "force-dynamic";
 
-export default function DiscoverPage() {
-  const subjects = Array.from(new Set(works.flatMap((w) => w.subjects))).sort();
+/** Discover: the catalogue, browsable by subject. No ranking magic — the
+ *  subject list is popularity-of-shelving, and within a subject the order is
+ *  the Bayesian rating the schema maintains. */
+export default async function Discover({ searchParams }: { searchParams: { subject?: string } }) {
+  const cookie = requestCookie();
+  const subject = searchParams.subject ?? "";
+  const works = subject
+    ? await listWorks(cookie, subject)
+    : await listWorks(cookie);
+  const subjects =
+    (await tryGet<{ subjects: { slug: string; name: string; work_count: number }[] }>("/v1/subjects?limit=24", { cookie }))
+      ?.subjects ?? [];
+
+  const authors: Record<string, string> = {};
+  for (const w of works) authors[w.slug] = w.author.name || fixtures.find((f) => f.slug === w.slug)?.author.name || "";
 
   return (
-    <div className="space-y-10">
-      <SectionHeading caption="No algorithmic sludge — curation and chronology" title="Discover" />
+    <PageFrame pathname="/discover" epigraph="There is no frigate like a book to take us lands away." attribution="Emily Dickinson">
+      <h1 className="section-title !text-[1.6rem]">Discover</h1>
+      <p className="pullquote mt-2 max-w-[62ch]">
+        The catalogue is browsed, not fed to you. Choose a subject, or take the shelves in the order
+        readers' own ratings imply — a Bayesian mean, so one enthusiastic stranger cannot outrank four
+        hundred considered ones.
+      </p>
 
-      <section aria-label="Browse by subject">
-        <p className="engraved-label mb-3">Browse by subject</p>
-        <ul className="flex flex-wrap gap-2">
+      {subjects.length ? (
+        <ul className="mt-5 flex flex-wrap gap-2">
           {subjects.map((s) => (
-            <li key={s}>
-              <span className="inline-block border border-ink px-3 py-1 text-sm text-ink-soft hover:bg-ink hover:text-parchment-light">
-                {s}
-              </span>
+            <li key={s.slug}>
+              <Link
+                href={`/discover?subject=${encodeURIComponent(s.slug)}`}
+                className={`btn-print !px-3 !py-1 !text-[0.8rem] ${subject === s.slug ? "!bg-ink !text-parchment-light" : ""}`}
+              >
+                {s.name}
+              </Link>
             </li>
           ))}
         </ul>
-      </section>
+      ) : null}
 
-      <section aria-label="The collection">
-        <p className="engraved-label mb-4">The collection · ranked by reader ratings, never by engagement</p>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {[...works]
-            .sort((a, b) => b.rating - a.rating || b.ratingCount - a.ratingCount)
-            .map((w) => (
-              <BookCard key={w.slug} work={w} />
-            ))}
-        </div>
-      </section>
-    </div>
+      <ul className="mt-7 grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 lg:grid-cols-5">
+        {works.map((w) => (
+          <li key={w.slug}>
+            <BookCard work={w} author={authors[w.slug]} />
+          </li>
+        ))}
+      </ul>
+    </PageFrame>
   );
 }

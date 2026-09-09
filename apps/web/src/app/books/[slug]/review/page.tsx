@@ -1,19 +1,32 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { getWork } from "@/lib/data";
-import { SectionHeading } from "@/components/Ornament";
-import { ReviewForm } from "./ReviewForm";
+import Link from "next/link";
+import { PageFrame } from "@/components/frame/PageFrame";
+import { ReviewForm } from "@/components/reviews/ReviewForm";
+import { me } from "@/lib/session";
+import { workDetail } from "@/lib/content";
 
-export const metadata: Metadata = { title: "Write a Review" };
+export const dynamic = "force-dynamic";
 
-export default function ReviewPage({ params }: { params: { slug: string } }) {
-  const work = getWork(params.slug);
-  if (!work) notFound();
+export default async function ReviewPage({ params }: { params: { slug: string } }) {
+  const session = await me();
+  const detail = await workDetail(params.slug);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      <SectionHeading caption={`${work.title} — ${work.author.name}`} title="Write a Review" />
-      <ReviewForm workTitle={work.title} workSlug={work.slug} />
-    </div>
+    <PageFrame pathname="" epigraph="Judgement is the whole of taste." attribution="Sainte-Beuve">
+      <p className="engraved-label">Review</p>
+      <h1 className="mt-1 text-[clamp(1.5rem,3vw,2rem)] text-ink">{detail?.work.title ?? params.slug}</h1>
+      {!session.authenticated ? (
+        <div className="panel mt-6 px-6 py-6">
+          <p className="pullquote max-w-[58ch]">
+            Reviews are signed, rate-limited, and at least 150 characters long — the platform's whole
+            defence against slop. Sign in to add yours.
+          </p>
+          <Link href="/signin" className="btn-solid mt-4">
+            Sign in
+          </Link>
+        </div>
+      ) : (
+        <ReviewForm slug={params.slug} title={detail?.work.title ?? params.slug} />
+      )}
+    </PageFrame>
   );
 }

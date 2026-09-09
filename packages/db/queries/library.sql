@@ -214,3 +214,44 @@ UPDATE annotations SET body = @body, kind = @kind
 
 -- name: DeleteAnnotation :execrows
 DELETE FROM annotations WHERE id = @id AND user_id = @user_id;
+
+-- ---- reading-life projections (right rail) -----------------------------------
+-- These exist so the UI never has to invent a number: every figure on the
+-- reader's right rail is derived from their own sessions, annotations and
+-- reviews, and shows zero when there is genuinely nothing yet.
+
+-- name: YearStatsForUser :one
+SELECT
+  count(*) FILTER (WHERE rs.finished_on >= make_date(@year, 1, 1))::bigint AS books_finished,
+  coalesce(sum(CASE WHEN e.page_count IS NOT NULL AND e.page_count > 0
+                    THEN round(e.page_count * rs.progress_bp / 10000.0)
+                    ELSE 0 END), 0)::bigint AS pages_read,
+  (SELECT count(*)::bigint FROM annotations a WHERE a.user_id = @user_id)::bigint AS notes
+FROM reading_sessions rs
+LEFT JOIN editions e ON e.id = rs.edition_id
+WHERE rs.user_id = @user_id;
+
+-- name: ListActivityDays :many
+-- Distinct days on which the reader touched a session, note, or review.
+-- The streak is computed in Go so the rule ("consecutive, today or yesterday
+-- anchored") lives in one testable place instead of in SQL date arithmetic.
+SELECT DISTINCT day FROM (
+  SELECT rs2.updated_at::date AS day FROM reading_sessions rs2 WHERE rs2.user_id = @user_id
+  UNION
+  SELECT a2.created_at::date  FROM annotations a2      WHERE a2.user_id = @user_id
+  UNION
+  SELECT r2.created_at::date  FROM reviews r2          WHERE r2.user_id = @user_id AND r2.deleted_at IS NULL
+) activity
+ORDER BY day DESC
+LIMIT @lim;
+
+-- name: ListAnnotationsForUser :many
+-- The reader's margin notes across every edition, for the Notes page.
+-- RLS-scoped like all annotation reads: only the caller's rows can appear.
+SELECT a.*, e.title AS edition_title, w.slug AS work_slug, w.title AS work_title
+  FROM annotations a
+  JOIN editions e ON e.id = a.edition_id
+  JOIN works w ON w.id = e.work_id
+ WHERE a.user_id = @user_id
+ ORDER BY a.updated_at DESC
+ LIMIT @lim OFFSET @off;

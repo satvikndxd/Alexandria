@@ -2,20 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ————— Alexandria base sheet ————— */
+/* ————————————————————————————————————————————————
+   Alexandria base sheet — "a restored ancient library
+   that happens to exist as modern software".
+
+   The reference artwork is near-monochrome ink on warm
+   parchment: classical serif caps, engraved botanicals,
+   hairline and 2px rules, sharp corners. Vermilion and
+   gold are held in reserve for the reader's own marks
+   (drop caps, ratings, your progress), never for chrome.
+   ———————————————————————————————————————————————— */
 
 :root {
   color-scheme: light;
+  --page: #ece5d3;
+  --panel: #f0ead9;
+  --ink: #171a14;
+  --ink-soft: #3c4036;
+  --ink-faint: #6b6f62;
+  --rule: #23261e;
+  --sepia: #5f584a;
 }
 
 html {
-  background-color: #e8ddc4;
+  background-color: var(--page);
 }
 
 body {
   @apply bg-parchment text-ink font-body antialiased;
-  /* Subtle paper grain: procedural turbulence, no image asset needed. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.07 0 0 0 0 0.09 0 0 0 0 0.07 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-color: var(--page);
+  /* Paper grain: procedural turbulence, no image asset, no network. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.07 0 0 0 0 0.09 0 0 0 0 0.07 0 0 0 0.045 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 
 ::selection {
@@ -23,7 +40,8 @@ body {
   color: #f0e7d2;
 }
 
-/* Old-style numerals & true small caps where the font provides them */
+/* ———— type ———— */
+
 .oldstyle {
   font-variant-numeric: oldstyle-nums;
 }
@@ -33,14 +51,45 @@ body {
   letter-spacing: 0.08em;
 }
 
-/* Engraved label: the tiny tracked-out uppercase captions used across the UI */
+/* The tiny tracked-out uppercase captions used across the sheet */
 .engraved-label {
-  @apply font-body text-[0.68rem] uppercase tracking-engraved text-botanical;
+  @apply font-body uppercase text-ink-faint;
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
 }
 
-/* Rule pairs — the double hairline rules of old title pages */
+/* Masthead wordmark: classical caps, wide tracking, optical spacing */
+.wordmark {
+  @apply font-body text-ink;
+  font-size: clamp(1.6rem, 3.2vw, 2.35rem);
+  letter-spacing: 0.34em;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.epigraph {
+  @apply font-body italic text-ink-soft;
+  font-size: 0.82rem;
+}
+
+/* Section titles: "Continue Reading", "For You" */
+.section-title {
+  @apply font-body text-ink;
+  font-size: 1.32rem;
+  letter-spacing: 0.01em;
+}
+
+/* ———— rules & frames ———— */
+
+/* The sheet's outer double rule, as on a title page */
+.sheet-frame {
+  border: 1px solid var(--rule);
+  outline: 1px solid var(--rule);
+  outline-offset: 3px;
+}
+
 .double-rule {
-  border-top: 1px solid #111713;
+  border-top: 1px solid var(--rule);
   position: relative;
 }
 .double-rule::after {
@@ -49,10 +98,146 @@ body {
   top: 3px;
   left: 0;
   right: 0;
-  border-top: 1px solid #111713;
+  border-top: 1px solid var(--rule);
 }
 
-/* Manuscript card: sharp corners, ink border, print-block depth on hover */
+.hairline {
+  border-top: 1px solid color-mix(in srgb, var(--rule) 55%, transparent);
+}
+
+/* Bordered panel: the boxes that hold hero, continue-reading, right rail */
+.panel {
+  border: 1.5px solid var(--rule);
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+}
+.panel-strong {
+  border: 2px solid var(--rule);
+  background: var(--panel);
+}
+
+/* ———— navigation ———— */
+
+.rail-link {
+  @apply flex items-center gap-3 px-4 py-2.5 text-ink-soft;
+  font-size: 0.92rem;
+  border: 1px solid transparent;
+}
+.rail-link:hover {
+  @apply text-ink;
+  background: color-mix(in srgb, var(--rule) 7%, transparent);
+}
+/* The active item is a solid ink block, exactly as in the reference */
+.rail-link[aria-current="page"] {
+  @apply bg-ink text-parchment-light;
+  border-color: var(--rule);
+}
+.rail-link[aria-current="page"]:hover {
+  @apply text-parchment-light;
+}
+
+/* Tabs ("Recommended · Public Domain · …"): active gets a single ink underline */
+.tab-link {
+  @apply pb-1 text-ink-faint;
+  font-size: 0.95rem;
+  border-bottom: 2px solid transparent;
+}
+.tab-link:hover {
+  @apply text-ink-soft;
+}
+.tab-link[aria-selected="true"] {
+  @apply text-ink;
+  border-bottom-color: var(--rule);
+}
+
+/* ———— controls ———— */
+
+/* Buttons are printed rectangles: sharp, bordered, invert on hover */
+.btn-print {
+  @apply inline-flex items-center gap-2 border-[1.5px] border-ink bg-transparent px-4 py-2 text-ink;
+  font-size: 0.9rem;
+  transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.btn-print:hover {
+  @apply bg-ink text-parchment-light;
+}
+.btn-print:active {
+  transform: translate(1px, 1px);
+}
+.btn-solid {
+  @apply inline-flex items-center gap-2 border-[1.5px] border-ink bg-ink px-4 py-2 text-parchment-light;
+  font-size: 0.9rem;
+}
+.btn-solid:hover {
+  background: color-mix(in srgb, var(--ink) 88%, #d9471f);
+}
+
+.field {
+  @apply w-full border-[1.5px] border-ink bg-parchment-panel px-3 py-2 text-ink placeholder:text-ink-faint;
+  font-size: 0.95rem;
+}
+.field:focus {
+  outline: 2px solid var(--rule);
+  outline-offset: 1px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--rule);
+  outline-offset: 2px;
+}
+
+/* ———— reading furniture ———— */
+
+/* Progress: a thin ruled track with a solid ink fill, as engraved */
+.progress-track {
+  @apply relative h-[7px] w-full border border-ink bg-transparent;
+}
+.progress-fill {
+  @apply absolute inset-y-0 left-0 bg-ink;
+}
+
+/* Streak calendar: small printed squares, filled vs ruled-empty */
+.streak-cell {
+  @apply h-[13px] w-[13px] border border-ink;
+}
+.streak-cell.filled {
+  @apply bg-ink;
+}
+.streak-cell.today {
+  background: repeating-linear-gradient(45deg, var(--ink) 0 2px, transparent 2px 4px);
+}
+
+/* Stat columns separated by vertical hairlines */
+.stat-col + .stat-col {
+  border-left: 1px solid color-mix(in srgb, var(--rule) 55%, transparent);
+}
+
+/* Pull quotes: italic serif, hanging punctuation feel */
+.pullquote {
+  @apply font-body italic text-ink-soft;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+/* Engraved imagery is sepia line-work, never full colour */
+.engraving {
+  color: var(--sepia);
+}
+.engraving-dark {
+  color: #2c2a24;
+}
+
+/* Avatars & emblems: circular medallions with a ruled ring */
+.medallion {
+  @apply flex items-center justify-center overflow-hidden rounded-full border border-ink bg-parchment-dark;
+}
+
+/* Book cover plate: the cover is the anchor; chrome stays off it */
+.cover-plate {
+  @apply relative block border border-ink bg-ink;
+  aspect-ratio: 2 / 3;
+}
+
+/* Manuscript card kept for list surfaces: sharp, hard offset depth */
 .manuscript-card {
   @apply border-2 border-ink bg-parchment-light rounded-none transition-[box-shadow,transform] duration-150;
 }
@@ -60,7 +245,7 @@ body {
   @apply shadow-block -translate-x-[2px] -translate-y-[2px];
 }
 
-/* Spoiler veil */
+/* Spoiler veil: blur is the affordance; the API withholds the bytes */
 .spoiler-veil {
   filter: blur(6px);
   user-select: none;
@@ -72,7 +257,8 @@ body {
   user-select: auto;
 }
 
-/* Reduced motion: kill the hover lift and any transition */
+/* ———— motion & misc ———— */
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -82,8 +268,7 @@ body {
   }
 }
 
-/* Scrollbar in keeping with the ink/parchment scheme */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #111713 #d9ccae;
+  scrollbar-color: #171a14 #d9ccae;
 }

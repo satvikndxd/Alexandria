@@ -1,117 +1,147 @@
-import Link from "next/link";
-import { works, reviews, scholarNotes, clubs, demoLibrary, getWork } from "@/lib/data";
-import { IlluminatedParagraph } from "@/components/DropCap";
-import { Divider, SectionHeading, Fleuron } from "@/components/Ornament";
-import { BookCard } from "@/components/BookCard";
-import { ReviewCard } from "@/components/ReviewCard";
-import { ScholarNoteCard } from "@/components/ScholarNoteCard";
-import { WoodcutCover } from "@/components/WoodcutCover";
+import { PageFrame } from "@/components/frame/PageFrame";
+import type { RightRailData } from "@/components/frame/Rail";
+import { GreetingHero } from "@/components/home/GreetingHero";
+import { ContinueReading, type ContinueItem } from "@/components/home/ContinueReading";
+import { ForYou } from "@/components/home/ForYou";
+import { ActivityStream } from "@/components/home/ActivityStream";
+import { me, requestCookie } from "@/lib/session";
+import { tryGet } from "@/lib/api";
+import { communityActivity, listClubs, listWorks, listReviews } from "@/lib/content";
+import { works as fixtureWorks, demoLibrary } from "@/lib/data";
 
-export default function HomePage() {
-  const continueReading = demoLibrary.reading
-    .map((r) => ({ ...r, work: getWork(r.slug)! }))
-    .filter((r) => r.work);
+export const dynamic = "force-dynamic";
+
+/**
+ * The Atrium: the page a reader lands on. Composed exactly as the reference
+ * sheet — greeting panel, continue reading, "For You" filters, activity —
+ * with the reading-life rail on the right. Every number on this page is
+ * either the reader's own data or clearly-labelled demonstration seed.
+ */
+export default async function Home() {
+  const cookie = requestCookie();
+  const session = await me();
+
+  const [works, activity, clubs] = await Promise.all([
+    listWorks(cookie),
+    communityActivity(cookie),
+    listClubs(cookie),
+  ]);
+
+  // Author names: the list endpoint carries works only, so fall back to the
+  // fixture authorship map when the API is absent.
+  const authors: Record<string, string> = {};
+  for (const w of works) {
+    authors[w.slug] = w.author.name || fixtureWorks.find((f) => f.slug === w.slug)?.author.name || "";
+  }
+
+  const continueItem = await continueReading(cookie, session.authenticated);
+  const rightRail = await railData(cookie, session.authenticated, clubs);
 
   return (
-    <div className="space-y-14">
-      {/* Frontispiece */}
-      <section aria-labelledby="frontispiece">
-        <p className="engraved-label">Anno MMXXVI · Open Source · Ad-Free</p>
-        <h2 id="frontispiece" className="mt-2 font-display text-5xl leading-tight text-ink md:text-6xl">
-          The Atrium
-        </h2>
-        <div className="double-rule mt-4" aria-hidden />
-        <div className="mt-6 max-w-2xl">
-          <IlluminatedParagraph text="Books are written by humans, discussed by humans, explained by humans, and read by humans. Alexandria is a quiet room in a loud age: a library, a margin to write in, and a table of good company — with no advertisements, no engagement bait, and no machine posing as a reader." />
-        </div>
-      </section>
-
-      {/* Continue Reading */}
-      <section aria-labelledby="continue-reading">
-        <SectionHeading caption="Where you left the ribbon" title="Continue Reading" />
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {continueReading.map(({ work, progress, format }) => (
-            <Link
-              key={work.slug}
-              href={`/books/${work.slug}`}
-              className="manuscript-card flex gap-4 p-4"
-            >
-              <div className="w-20 shrink-0">
-                <WoodcutCover work={work} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="font-body text-lg font-semibold leading-tight text-ink">{work.title}</h3>
-                <p className="text-sm italic text-ink-faint">{work.author.name}</p>
-                <p className="mt-1 text-xs text-ink-faint">{format}</p>
-                <div className="mt-3">
-                  <div className="h-2 border border-ink bg-parchment">
-                    <div className="h-full bg-botanical" style={{ width: `${progress * 100}%` }} />
-                  </div>
-                  <p className="oldstyle mt-1 text-xs text-ink-faint">
-                    {Math.round(progress * 100)}% through
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* Public Domain Classics */}
-      <section aria-labelledby="classics">
-        <SectionHeading caption="Free to every reader, forever" title="Public Domain Classics" />
-        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {works.slice(0, 4).map((w) => (
-            <BookCard key={w.slug} work={w} />
-          ))}
-        </div>
-        <p className="mt-4 text-right">
-          <Link href="/discover" className="text-sm italic text-botanical underline underline-offset-4 hover:text-vermilion">
-            Browse the whole collection →
-          </Link>
-        </p>
-      </section>
-
-      <Divider />
-
-      {/* Human Reviews */}
-      <section aria-labelledby="human-reviews">
-        <SectionHeading caption="Written by people, at length, on purpose" title="Human Reviews" />
-        <div className="mt-6 space-y-5">
-          {reviews.slice(0, 2).map((r) => (
-            <ReviewCard key={r.id} review={r} />
-          ))}
-        </div>
-      </section>
-
-      {/* Scholar Notes */}
-      <section aria-labelledby="scholarship">
-        <SectionHeading caption="Marginalia with citations" title="From the Scriptorium" />
-        <div className="mt-6 grid gap-5 lg:grid-cols-2">
-          {scholarNotes.map((n) => (
-            <ScholarNoteCard key={n.id} note={n} />
-          ))}
-        </div>
-      </section>
-
-      <Divider />
-
-      {/* Book Clubs */}
-      <section aria-labelledby="clubs">
-        <SectionHeading caption="Good company for long books" title="Book Clubs" />
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {clubs.map((c) => (
-            <Link key={c.slug} href={`/clubs/${c.slug}`} className="manuscript-card block p-5">
-              <Fleuron size={18} className="text-vermilion" />
-              <h3 className="mt-2 font-display text-2xl text-ink">{c.name}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-soft">{c.description}</p>
-              <p className="oldstyle mt-3 text-xs uppercase tracking-engraved text-botanical">
-                {c.members} members
-              </p>
-            </Link>
-          ))}
-        </div>
-      </section>
-    </div>
+    <PageFrame
+      pathname="/"
+      epigraph="A room without books is a body without a soul."
+      attribution="Cicero"
+      rightRail={rightRail}
+    >
+      <GreetingHero name={session.user?.display_name || session.user?.username || null} />
+      <ContinueReading item={continueItem} />
+      <ForYou works={works} authors={authors} />
+      <ActivityStream items={activity} />
+    </PageFrame>
   );
+}
+
+/* ———— data shaping ———— */
+
+async function continueReading(cookie: string | undefined, signedIn: boolean): Promise<ContinueItem | null> {
+  if (signedIn) {
+    const res = await tryGet<{
+      currently_reading: {
+        work_slug: string;
+        work_title: string;
+        progress_bp: number;
+        format?: string | null;
+        primary_author?: string | null;
+        started_on?: string | null;
+      }[];
+    }>("/v1/me/currently-reading", { cookie });
+    const row = res?.currently_reading?.[0];
+    if (row) {
+      const work = fixtureWorks.find((w) => w.slug === row.work_slug) ?? {
+        ...fixtureWorks[0],
+        slug: row.work_slug,
+        title: row.work_title,
+      };
+      const own = await ownExcerpt(cookie, row.work_slug);
+      return {
+        work: { ...work, slug: row.work_slug, title: row.work_title },
+        author: row.primary_author ?? work.author.name,
+        progressBp: row.progress_bp,
+        formatLine: [row.format ?? "Edition", row.started_on ? `since ${row.started_on}` : ""].filter(Boolean).join(" · "),
+        ownExcerpt: own,
+      };
+    }
+    return null;
+  }
+  // Signed-out: show nothing as if it were the reader's desk; invite instead.
+  if (demoLibrary.reading.length === 0) return null;
+  const first = demoLibrary.reading[0];
+  const work = fixtureWorks.find((w) => w.slug === first.slug);
+  if (!work) return null;
+  return null; // the desk is empty until you sign in — honest by design
+}
+
+async function ownExcerpt(cookie: string | undefined, slug: string): Promise<string | undefined> {
+  const reviews = await listReviews(slug, cookie);
+  const mine = reviews[0];
+  if (!mine) return undefined;
+  const clean = mine.body.replace(/\s+/g, " ").trim();
+  return clean.length > 150 ? clean.slice(0, 150) + "…" : clean;
+}
+
+async function railData(
+  cookie: string | undefined,
+  signedIn: boolean,
+  clubs: { slug: string; name: string; members: number }[],
+): Promise<RightRailData> {
+  const circles = clubs.slice(0, 3).map((c) => ({
+    slug: c.slug,
+    name: c.name,
+    members: formatCount(c.members),
+  }));
+  const quote = {
+    text: "Read slowly. Some books are to be tasted, others to be swallowed, and some few to be chewed and digested.",
+    by: "Francis Bacon",
+  };
+  if (!signedIn) {
+    return {
+      streakDays: 0,
+      streakCells: Array.from({ length: 14 }, () => "empty"),
+      year: { books: 0, pages: 0, notes: 0 },
+      circles,
+      quote,
+    };
+  }
+  const stats = await tryGet<{
+    year: { books_finished: number; pages_read: number; notes: number };
+    streak_days: number;
+    streak_cells: string[];
+  }>("/v1/me/stats", { cookie });
+  return {
+    streakDays: stats?.streak_days ?? 0,
+    streakCells: (stats?.streak_cells ?? Array.from({ length: 14 }, () => "empty")) as RightRailData["streakCells"],
+    year: {
+      books: stats?.year?.books_finished ?? 0,
+      pages: stats?.year?.pages_read ?? 0,
+      notes: stats?.year?.notes ?? 0,
+    },
+    circles,
+    quote,
+  };
+}
+
+function formatCount(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(n);
 }

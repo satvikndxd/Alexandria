@@ -1,7 +1,9 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Alexandria design tokens — "Illuminated Manuscript / Botanical Woodcut".
+ * Alexandria design tokens — "Illuminated Manuscript / Botanical Woodcut",
+ * tuned against the reference sheet: warm parchment ground, near-monochrome
+ * ink, sepia engravings, vermilion/gold held in reserve.
  *
  * Rules encoded here, enforced everywhere:
  *  - sharp editorial corners: the only radii are 0 and 2px ("nick")
@@ -17,13 +19,19 @@ const config: Config = {
       parchment: {
         DEFAULT: "#E8DDC4",
         light: "#F0E7D2",
+        page: "#ECE5D3",
+        panel: "#F0EAD9",
         dark: "#D9CCAE",
         deep: "#C9B992",
       },
       ink: {
-        DEFAULT: "#111713",
-        soft: "#2A322B",
-        faint: "#4A5348",
+        DEFAULT: "#171A14",
+        soft: "#3C4036",
+        faint: "#6B6F62",
+      },
+      sepia: {
+        DEFAULT: "#5F584A",
+        light: "#8A8172",
       },
       botanical: {
         DEFAULT: "#0D3B2E",
@@ -51,17 +59,18 @@ const config: Config = {
       },
       boxShadow: {
         // hard print-block offsets — never blurred
-        block: "4px 4px 0 0 #111713",
-        "block-sm": "2px 2px 0 0 #111713",
+        block: "4px 4px 0 0 #171A14",
+        "block-sm": "2px 2px 0 0 #171A14",
         "block-green": "4px 4px 0 0 #0D3B2E",
         "block-vermilion": "4px 4px 0 0 #D9471F",
         none: "none",
       },
       letterSpacing: {
-        engraved: "0.18em",
+        engraved: "0.22em",
+        wordmark: "0.34em",
       },
       maxWidth: {
-        folio: "72rem",
+        folio: "76rem",
       },
     },
   },

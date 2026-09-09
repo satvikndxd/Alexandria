@@ -167,9 +167,11 @@ Full guide: [`docs/SETUP.md`](docs/SETUP.md).
 ## Roadmap
 
 1. **Foundation** ✅ — schema, monolith, ingestion pipeline, design system, web shell
-2. **MVP** ✅ (backend) — passkey + magic-link auth, sessions + CSRF, Meilisearch
-   search with Postgres fallback, live library/progress/reviews/clubs APIs,
-   RLS, integration suite · *(web client wiring in progress)*
+2. **MVP** ✅ — passkey + magic-link auth, sessions + CSRF, Meilisearch search
+   with Postgres fallback, live library/progress/reviews/clubs APIs, RLS,
+   integration suite; **web client wired to the live API** and recomposed
+   against the reference sheet (three-column folio, engraved rail, reading-life
+   right rail), with an end-to-end smoke script proving the whole loop
 3. **Reader** — EPUB/TXT renderer with parchment typography, annotations
 4. **Community** — scholar verification + peer review, clubs with LiveKit voice/video
 

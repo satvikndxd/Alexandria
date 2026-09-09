@@ -378,6 +378,46 @@ func (q *Queries) LibraryCountsForUser(ctx context.Context, userID uuid.UUID) ([
 	return items, nil
 }
 
+const listActivityDays = `-- name: ListActivityDays :many
+SELECT DISTINCT day FROM (
+  SELECT rs2.updated_at::date AS day FROM reading_sessions rs2 WHERE rs2.user_id = $1
+  UNION
+  SELECT a2.created_at::date  FROM annotations a2      WHERE a2.user_id = $1
+  UNION
+  SELECT r2.created_at::date  FROM reviews r2          WHERE r2.user_id = $1 AND r2.deleted_at IS NULL
+) activity
+ORDER BY day DESC
+LIMIT $2
+`
+
+type ListActivityDaysParams struct {
+	UserID uuid.UUID `json:"user_id"`
+	Lim    int32     `json:"lim"`
+}
+
+// Distinct days on which the reader touched a session, note, or review.
+// The streak is computed in Go so the rule ("consecutive, today or yesterday
+// anchored") lives in one testable place instead of in SQL date arithmetic.
+func (q *Queries) ListActivityDays(ctx context.Context, arg ListActivityDaysParams) ([]pgtype.Date, error) {
+	rows, err := q.db.Query(ctx, listActivityDays, arg.UserID, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.Date{}
+	for rows.Next() {
+		var day pgtype.Date
+		if err := rows.Scan(&day); err != nil {
+			return nil, err
+		}
+		items = append(items, day)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAnnotationsForEdition = `-- name: ListAnnotationsForEdition :many
 SELECT id, user_id, edition_id, chapter_idx, start_off, end_off, kind, body, is_private, created_at, updated_at FROM annotations
  WHERE user_id = $1 AND edition_id = $2
@@ -412,6 +452,76 @@ func (q *Queries) ListAnnotationsForEdition(ctx context.Context, arg ListAnnotat
 			&i.IsPrivate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAnnotationsForUser = `-- name: ListAnnotationsForUser :many
+SELECT a.id, a.user_id, a.edition_id, a.chapter_idx, a.start_off, a.end_off, a.kind, a.body, a.is_private, a.created_at, a.updated_at, e.title AS edition_title, w.slug AS work_slug, w.title AS work_title
+  FROM annotations a
+  JOIN editions e ON e.id = a.edition_id
+  JOIN works w ON w.id = e.work_id
+ WHERE a.user_id = $1
+ ORDER BY a.updated_at DESC
+ LIMIT $3 OFFSET $2
+`
+
+type ListAnnotationsForUserParams struct {
+	UserID uuid.UUID `json:"user_id"`
+	Off    int32     `json:"off"`
+	Lim    int32     `json:"lim"`
+}
+
+type ListAnnotationsForUserRow struct {
+	ID           uuid.UUID          `json:"id"`
+	UserID       uuid.UUID          `json:"user_id"`
+	EditionID    uuid.UUID          `json:"edition_id"`
+	ChapterIdx   int32              `json:"chapter_idx"`
+	StartOff     int32              `json:"start_off"`
+	EndOff       int32              `json:"end_off"`
+	Kind         string             `json:"kind"`
+	Body         string             `json:"body"`
+	IsPrivate    bool               `json:"is_private"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	EditionTitle string             `json:"edition_title"`
+	WorkSlug     string             `json:"work_slug"`
+	WorkTitle    string             `json:"work_title"`
+}
+
+// The reader's margin notes across every edition, for the Notes page.
+// RLS-scoped like all annotation reads: only the caller's rows can appear.
+func (q *Queries) ListAnnotationsForUser(ctx context.Context, arg ListAnnotationsForUserParams) ([]ListAnnotationsForUserRow, error) {
+	rows, err := q.db.Query(ctx, listAnnotationsForUser, arg.UserID, arg.Off, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAnnotationsForUserRow{}
+	for rows.Next() {
+		var i ListAnnotationsForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.EditionID,
+			&i.ChapterIdx,
+			&i.StartOff,
+			&i.EndOff,
+			&i.Kind,
+			&i.Body,
+			&i.IsPrivate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.EditionTitle,
+			&i.WorkSlug,
+			&i.WorkTitle,
 		); err != nil {
 			return nil, err
 		}
@@ -941,5 +1051,40 @@ func (q *Queries) UpsertReadingProgress(ctx context.Context, arg UpsertReadingPr
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const yearStatsForUser = `-- name: YearStatsForUser :one
+
+SELECT
+  count(*) FILTER (WHERE rs.finished_on >= make_date($1, 1, 1))::bigint AS books_finished,
+  coalesce(sum(CASE WHEN e.page_count IS NOT NULL AND e.page_count > 0
+                    THEN round(e.page_count * rs.progress_bp / 10000.0)
+                    ELSE 0 END), 0)::bigint AS pages_read,
+  (SELECT count(*)::bigint FROM annotations a WHERE a.user_id = $2)::bigint AS notes
+FROM reading_sessions rs
+LEFT JOIN editions e ON e.id = rs.edition_id
+WHERE rs.user_id = $2
+`
+
+type YearStatsForUserParams struct {
+	Year   int32     `json:"year"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+type YearStatsForUserRow struct {
+	BooksFinished int64 `json:"books_finished"`
+	PagesRead     int64 `json:"pages_read"`
+	Notes         int64 `json:"notes"`
+}
+
+// ---- reading-life projections (right rail) -----------------------------------
+// These exist so the UI never has to invent a number: every figure on the
+// reader's right rail is derived from their own sessions, annotations and
+// reviews, and shows zero when there is genuinely nothing yet.
+func (q *Queries) YearStatsForUser(ctx context.Context, arg YearStatsForUserParams) (YearStatsForUserRow, error) {
+	row := q.db.QueryRow(ctx, yearStatsForUser, arg.Year, arg.UserID)
+	var i YearStatsForUserRow
+	err := row.Scan(&i.BooksFinished, &i.PagesRead, &i.Notes)
 	return i, err
 }
