@@ -50,6 +50,11 @@ type Config struct {
 	RatePerMin int
 	RateBurst  int
 
+	// Web Push (VAPID); empty keys disable push honestly
+	PushVAPIDPublic  string
+	PushVAPIDPrivate string
+	PushSubject      string
+
 	// LiveKit (voice/video rooms); empty URL disables rooms honestly
 	LiveKitURL       string
 	LiveKitAPIKey    string
@@ -98,6 +103,10 @@ func Load() Config {
 
 		RatePerMin: getint("RATE_LIMIT_PER_MIN", 120),
 		RateBurst:  getint("RATE_LIMIT_BURST", 30),
+
+		PushVAPIDPublic:  getenv("PUSH_VAPID_PUBLIC", ""),
+		PushVAPIDPrivate: getenv("PUSH_VAPID_PRIVATE", ""),
+		PushSubject:      getenv("PUSH_SUBJECT", "mailto:ops@alexandria.example"),
 
 		LiveKitURL:       getenv("LIVEKIT_URL", ""),
 		LiveKitAPIKey:    getenv("LIVEKIT_API_KEY", ""),

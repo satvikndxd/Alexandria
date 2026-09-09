@@ -13,6 +13,7 @@ import (
 
 type Querier interface {
 	AddNoteCitation(ctx context.Context, arg AddNoteCitationParams) error
+	AddPushSubscription(ctx context.Context, arg AddPushSubscriptionParams) (PushSubscription, error)
 	AddToShelf(ctx context.Context, arg AddToShelfParams) (ShelfItem, error)
 	// Reputation gates posting limits. It moves only through explicit, recorded
 	// events (a moderator action, a published scholar note, a sustained history of
@@ -101,6 +102,7 @@ type Querier interface {
 	DeleteCustomShelf(ctx context.Context, arg DeleteCustomShelfParams) (int64, error)
 	DeleteExpiredChallenges(ctx context.Context, now pgtype.Timestamptz) (int64, error)
 	DeleteNoteCitation(ctx context.Context, arg DeleteNoteCitationParams) (int64, error)
+	DeletePushSubscription(ctx context.Context, arg DeletePushSubscriptionParams) (int64, error)
 	DeleteStaleAuthChallenges(ctx context.Context, now pgtype.Timestamptz) (int64, error)
 	// The ledger only ever needs its trailing window for cap checks; pruning keeps
 	// the index tight without losing auditability (reviews themselves remain).
@@ -266,9 +268,15 @@ type Querier interface {
 	// no false equivalence either.
 	ListNotesForWork(ctx context.Context, arg ListNotesForWorkParams) ([]ListNotesForWorkRow, error)
 	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
+	ListNotificationsSince(ctx context.Context, arg ListNotificationsSinceParams) ([]Notification, error)
 	ListOpenReports(ctx context.Context, arg ListOpenReportsParams) ([]ListOpenReportsRow, error)
 	ListPendingScholarProfiles(ctx context.Context, arg ListPendingScholarProfilesParams) ([]ListPendingScholarProfilesRow, error)
 	ListPopularSubjects(ctx context.Context, lim int32) ([]ListPopularSubjectsRow, error)
+	// Subscriptions with anything notified since their last push. 'epoch' as the
+	// floor means a fresh subscription is due immediately, which is what a
+	// reader expects when they flip the switch.
+	ListPushDue(ctx context.Context, lim int32) ([]PushSubscription, error)
+	ListPushSubscriptionsForUser(ctx context.Context, userID uuid.UUID) ([]PushSubscription, error)
 	ListReadingSessions(ctx context.Context, arg ListReadingSessionsParams) ([]ReadingSession, error)
 	// The logged-out / empty-following home page: newest substantive reviews
 	// platform-wide. Reverse-chronological, capped, and it never pretends to be
@@ -303,6 +311,7 @@ type Querier interface {
 	MarkEmailFailed(ctx context.Context, arg MarkEmailFailedParams) (int64, error)
 	MarkEmailSent(ctx context.Context, id int64) (int64, error)
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
+	MarkPushed(ctx context.Context, arg MarkPushedParams) (int64, error)
 	MarkSessionDNF(ctx context.Context, arg MarkSessionDNFParams) (int64, error)
 	// ---- Transactional outbox ---------------------------------------------------
 	OutboxAppend(ctx context.Context, arg OutboxAppendParams) error

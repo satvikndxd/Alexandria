@@ -21,6 +21,7 @@ import (
 	"github.com/alexandria-reads/alexandria/apps/api/internal/metrics"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/ratelimit"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/reader"
+	"github.com/alexandria-reads/alexandria/apps/api/internal/push"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/realtime"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/search"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/store"
@@ -33,6 +34,7 @@ type Server struct {
 	magic     *auth.MagicLinks
 	search    *search.Client
 	textCache *reader.Cache
+	pushCfg   push.Config
 	lk        realtime.Config
 	bootCtx   context.Context
 	friction  domain.FrictionPolicy
@@ -50,6 +52,9 @@ func New(cfg config.Config, st *store.Store, authSvc *auth.Service, magic *auth.
 		magic:     magic,
 		search:    sc,
 		textCache: reader.NewCache(cfg.ReaderCacheDir),
+		pushCfg: push.Config{
+			PublicKey: cfg.PushVAPIDPublic, PrivateKey: cfg.PushVAPIDPrivate, Subject: cfg.PushSubject,
+		},
 		lk: realtime.Config{
 			URL: cfg.LiveKitURL, APIKey: cfg.LiveKitAPIKey, APISecret: cfg.LiveKitAPISecret,
 		},
@@ -146,6 +151,9 @@ func (s *Server) routes() chi.Router {
 		r.Delete("/users/{username}/follow", requireAuth(s.handleUnfollow))
 		r.Post("/users/{username}/block", requireAuth(s.handleBlock))
 		r.Delete("/users/{username}/block", requireAuth(s.handleUnblock))
+		r.Get("/push/config", s.handlePushConfig)
+		r.Post("/push/subscribe", requireAuth(s.handlePushSubscribe))
+		r.Delete("/push/subscribe", requireAuth(s.handlePushUnsubscribe))
 		r.Get("/me/notifications", requireAuth(s.handleNotifications))
 		r.Post("/me/notifications/read", requireAuth(s.handleMarkNotificationsRead))
 

@@ -24,6 +24,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alexandria-reads/alexandria/apps/api/internal/push"
+
 	"github.com/alexandria-reads/alexandria/apps/api/internal/auth"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/config"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/db"
@@ -79,6 +81,29 @@ type env struct {
 	url       string
 	client    func() *http.Client
 	cfg       config.Config
+	pushCfg   push.Config
+}
+
+// storeWithPush returns the env store; push config travels with the tick, not
+// the store, so tests can mint keys per case.
+func (e *env) storeWithPush(_ push.Config) *store.Store { return e.st }
+
+// csrfFor reads the double-submit token from a client's cookie jar.
+func (e *env) csrfFor(t *testing.T, c *http.Client) string {
+	t.Helper()
+	req, _ := http.NewRequestWithContext(e.ctx, http.MethodGet, e.url+"/v1/me", nil)
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	var me struct {
+		CSRF string `json:"csrf_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&me); err != nil {
+		t.Fatalf("me decode: %v", err)
+	}
+	return me.CSRF
 }
 
 func newEnv(t *testing.T) *env {
@@ -128,6 +153,15 @@ func newEnv(t *testing.T) *env {
 		LiveKitAPIKey:    "test-key",
 		LiveKitAPISecret: "test-secret-test-secret",
 	}
+	// VAPID keys per test env, so push is enabled and testable end to end.
+	vapidPub, vapidPriv, err := push.GenerateVAPID()
+	if err != nil {
+		t.Fatalf("vapid: %v", err)
+	}
+	cfg.PushVAPIDPublic = vapidPub
+	cfg.PushVAPIDPrivate = vapidPriv
+	cfg.PushSubject = "mailto:test@alexandria.example"
+
 	authSvc, err := auth.NewService(st, cfg.WebAuthnRPID, cfg.WebAuthnRPDisplayName, cfg.WebAuthnOrigins, false)
 	if err != nil {
 		t.Fatalf("auth service: %v", err)
@@ -137,8 +171,11 @@ func newEnv(t *testing.T) *env {
 
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
-	return &env{t: t, ctx: ctx, st: st, ownerPool: ownerPool, srv: srv, url: ts.URL, cfg: cfg,
-		client: func() *http.Client { return jarClient(t) }}
+	return &env{
+		t: t, ctx: ctx, st: st, ownerPool: ownerPool, srv: srv, url: ts.URL, cfg: cfg,
+		pushCfg: push.Config{PublicKey: vapidPub, PrivateKey: vapidPriv, Subject: cfg.PushSubject},
+		client:  func() *http.Client { return jarClient(t) },
+	}
 }
 
 // truncateAll resets every content table between tests while preserving

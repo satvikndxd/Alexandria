@@ -168,6 +168,13 @@ model, thirty documents, each citing the file that implements it — lives in
 - Backend, web, infrastructure: **AGPL-3.0-only** ([LICENSE](LICENSE))
 - Flutter client & design tokens: **MIT** ([apps/mobile/LICENSE](apps/mobile/LICENSE))
 
+## Web Push
+Opt-in per device, VAPID-signed, payloads encrypted per RFC 8291 with
+aes128gcm — the push service learns that you were notified, never what about.
+The delivery sweep gathers inside a service-context transaction (notifications
+are RLS-private), sends outside any transaction, then advances cursors; dead
+endpoints (404/410) are forgotten, not retried. Keys: `go run ./cmd/vapid`.
+
 ## Trust & observability
 Report filing with the moderation enum as its vocabulary; a moderator queue
 ordered by severity whose centre is the written rationale; scholar

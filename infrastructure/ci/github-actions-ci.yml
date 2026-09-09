@@ -107,6 +107,70 @@ jobs:
         working-directory: apps/web
       - run: npm run build --workspace @alexandria/web
 
+  e2e:
+    name: Web — Playwright against a live stack
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: alexandria
+          POSTGRES_PASSWORD: alexandria
+          POSTGRES_DB: alexandria
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U alexandria"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: apps/api/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Migrate
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgres://alexandria:alexandria@localhost:5432/alexandria?sslmode=disable
+        run: go run ./cmd/migrate up
+      - name: Seed a readable edition
+        env:
+          PGPASSWORD: alexandria
+        run: |
+          psql -h localhost -U alexandria -d alexandria -v ON_ERROR_STOP=1 -c "
+            INSERT INTO authors (name,sort_name,slug) VALUES ('Jane Austen','Austen, Jane','jane-austen') ON CONFLICT DO NOTHING;
+            INSERT INTO works (slug,title,description,is_public_domain,first_published) VALUES ('pride-and-prejudice','Pride and Prejudice','A novel of manners.',true,1813) ON CONFLICT DO NOTHING;
+            INSERT INTO work_authors (work_id,author_id) SELECT w.id,a.id FROM works w,authors a WHERE w.slug='pride-and-prejudice' AND a.slug='jane-austen' ON CONFLICT DO NOTHING;
+            INSERT INTO editions (work_id,title,format,language,gutenberg_id) SELECT w.id,'Pride and Prejudice (Gutenberg)','gutenberg','en',1342 FROM works w WHERE w.slug='pride-and-prejudice' ON CONFLICT DO NOTHING;"
+      - name: Build web
+        env:
+          ALEXANDRIA_API_URL: http://127.0.0.1:8080
+        run: npm run build --workspace @alexandria/web
+      - name: Start API and web
+        env:
+          DATABASE_URL: postgres://alexandria:alexandria@localhost:5432/alexandria?sslmode=disable
+          ALEXANDRIA_API_URL: http://127.0.0.1:8080
+          READER_CACHE_DIR: /tmp/alexandria-texts
+        run: |
+          (cd apps/api && nohup go run ./cmd/api > /tmp/api.log 2>&1 &)
+          (nohup npm run start --workspace @alexandria/web > /tmp/web.log 2>&1 &)
+          sleep 12
+      - name: Playwright
+        working-directory: apps/web
+        env:
+          BASE_URL: http://127.0.0.1:3000
+          READER_EDITION_ID: ${{ env.READER_EDITION_ID }}
+        run: |
+          npx playwright install --with-deps chromium
+          export READER_EDITION_ID=$(psql -h localhost -U alexandria -d alexandria -tAc "SELECT id FROM editions WHERE gutenberg_id=1342" )
+          npx playwright test
+
   mobile:
     name: Flutter — analyze & test
     runs-on: ubuntu-latest

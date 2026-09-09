@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageFrame } from "@/components/frame/PageFrame";
 import { MarkAllRead } from "@/components/social/MarkAllRead";
+import { PushEnable } from "@/components/social/PushEnable";
 import { me, requestCookie } from "@/lib/session";
 import { tryGet } from "@/lib/api";
 
@@ -35,7 +36,10 @@ export default async function NotificationsPage() {
     <PageFrame pathname="" epigraph="A reply is a hand raised across the room." attribution="Alexandria">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="section-title !text-[1.7rem]">Alerts</h1>
-        <MarkAllRead />
+        <span className="flex items-center gap-3">
+          <PushEnable />
+          <MarkAllRead />
+        </span>
       </div>
       {notes.length === 0 ? (
         <p className="pullquote mt-5 max-w-[58ch]">

@@ -917,6 +917,17 @@ type Profile struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type PushSubscription struct {
+	ID           uuid.UUID          `json:"id"`
+	UserID       uuid.UUID          `json:"user_id"`
+	Endpoint     string             `json:"endpoint"`
+	P256dh       []byte             `json:"p256dh"`
+	Auth         []byte             `json:"auth"`
+	UserAgent    *string            `json:"user_agent"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	LastPushedAt pgtype.Timestamptz `json:"last_pushed_at"`
+}
+
 type ReadingSession struct {
 	ID         uuid.UUID          `json:"id"`
 	UserID     uuid.UUID          `json:"user_id"`

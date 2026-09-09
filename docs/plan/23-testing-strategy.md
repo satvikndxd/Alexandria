@@ -16,8 +16,12 @@
 3. **End-to-end smoke** (`infrastructure/smoke/e2e_smoke.py`): browserless,
    drives web edge → monolith → Postgres: magic-link ceremony, CSRF 403,
    shelving, progress, SSR pages, review friction accept/refuse.
-4. **Web**: `tsc --noEmit` + `next build` as type/route gates; Playwright ⏳
-   for the reader's typography controls (Phase 3).
+4. **Web**: `tsc --noEmit` + `next build` as type/route gates; **Playwright E2E**
+   (`apps/web/e2e`) against a live stack: folio chrome, lost-folio page, search
+   surface, and the reader's typography persistence (size/theme survive reload;
+   the ink theme's surface is asserted after its transition settles). Specs
+   needing seeded data skip honestly without it; sandbox/CI browsers select the
+   headless shell and jitless VAPID-free flags via PW_CHANNEL/PW_JITLESS.
 5. **Mobile**: `flutter analyze` + widget tests for the drop-cap painter.
 6. **Schema**: CI applies every migration to a fresh Postgres; sqlc drift
    check fails the build.

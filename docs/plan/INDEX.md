@@ -33,7 +33,7 @@ says so.
 | 20 | [Open-Source Strategy](20-open-source-strategy.md) | living |
 | 21 | [Licensing & Legal](21-licensing-legal.md) | research |
 | 22 | [Infrastructure & Deployment](22-infrastructure.md) | partial |
-| 23 | [Testing Strategy](23-testing-strategy.md) | implemented |
+| 23 | [Testing Strategy](23-testing-strategy.md) | implemented (+E2E) |
 | 24 | [CI/CD](24-ci-cd.md) | implemented |
 | 25 | [Development Roadmap](25-roadmap.md) | living |
 | 26 | [MVP Definition](26-mvp-definition.md) | achieved |

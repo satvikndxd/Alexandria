@@ -14,6 +14,7 @@ import (
 	"github.com/alexandria-reads/alexandria/apps/api/internal/events"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/httpapi"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/metrics"
+	"github.com/alexandria-reads/alexandria/apps/api/internal/push"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/search"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/store"
 )
@@ -69,9 +70,35 @@ func main() {
 	// publishes queue-depth gauges.
 	go pruneLoop(ctx, st, time.Hour)
 
+	// Web Push delivery: a 30s tick over due subscriptions. Push is opt-in per
+	// device and disabled honestly when no VAPID keys are configured.
+	pushCfg := push.Config{
+		PublicKey: cfg.PushVAPIDPublic, PrivateKey: cfg.PushVAPIDPrivate, Subject: cfg.PushSubject,
+	}
+	if pushCfg.Enabled() {
+		go pushLoop(ctx, st, pushCfg, 30*time.Second)
+	} else {
+		slog.Info("web push disabled (no VAPID keys configured)")
+	}
+
 	if err := httpapi.New(cfg, st, authSvc, magic, sc).Run(ctx); err != nil {
 		slog.Error("server exited", "err", err)
 		os.Exit(1)
+	}
+}
+
+func pushLoop(ctx context.Context, st *store.Store, cfg push.Config, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if _, err := st.PushTick(ctx, cfg); err != nil {
+				slog.Warn("push tick failed", "err", err)
+			}
+		}
 	}
 }
 
