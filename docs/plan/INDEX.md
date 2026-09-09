@@ -25,7 +25,7 @@ says so.
 | 12 | [Project Gutenberg Integration](12-gutenberg-integration.md) | partial |
 | 13 | [Kindle / External Reading Integrations](13-external-integrations.md) | research |
 | 14 | [Social & Community Architecture](14-social-community.md) | implemented |
-| 15 | [Scholar System](15-scholar-system.md) | schema-ready |
+| 15 | [Scholar System](15-scholar-system.md) | implemented |
 | 16 | [Realtime Communication](16-realtime.md) | research |
 | 17 | [Moderation & Trust](17-moderation-trust.md) | partial |
 | 18 | [Security Model](18-security-model.md) | implemented |

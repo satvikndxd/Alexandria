@@ -636,8 +636,8 @@ func (q *Queries) SetNoteStatus(ctx context.Context, arg SetNoteStatusParams) (i
 const setScholarStatus = `-- name: SetScholarStatus :execrows
 UPDATE scholar_profiles
    SET status = $1,
-       verified_by = CASE WHEN $1 = 'verified' THEN $2 ELSE verified_by END,
-       verified_at = CASE WHEN $1 = 'verified' THEN now() ELSE verified_at END
+       verified_by = CASE WHEN $1 = 'verified'::scholar_status THEN $2 ELSE verified_by END,
+       verified_at = CASE WHEN $1 = 'verified'::scholar_status THEN now() ELSE verified_at END
  WHERE user_id = $3
 `
 
@@ -647,6 +647,8 @@ type SetScholarStatusParams struct {
 	UserID     uuid.UUID     `json:"user_id"`
 }
 
+// The literal is cast explicitly: reusing @status in both an enum assignment
+// and a comparison leaves Postgres unable to deduce the parameter's type.
 func (q *Queries) SetScholarStatus(ctx context.Context, arg SetScholarStatusParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setScholarStatus, arg.Status, arg.VerifiedBy, arg.UserID)
 	if err != nil {

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -53,9 +54,22 @@ func respondStoreError(w http.ResponseWriter, err error) {
 		respondError(w, http.StatusUnauthorized, "invalid_ceremony", "That sign-in attempt is no longer valid. Please try again.")
 	case errors.Is(err, auth.ErrNoCredentials):
 		respondError(w, http.StatusUnprocessableEntity, "no_passkeys", "This account has no passkey yet — use the email link, then add one.")
+	case errors.Is(err, store.ErrNotNoteAuthor), errors.Is(err, store.ErrReviewOwnNote),
+		errors.Is(err, store.ErrNotVerified):
+		respondError(w, http.StatusForbidden, "not_permitted", err.Error())
+		return
+	case errors.Is(err, store.ErrOrcidTaken):
+		respondError(w, http.StatusConflict, "orcid_taken", err.Error())
+		return
+	case errors.Is(err, store.ErrNoteState):
+		respondError(w, http.StatusConflict, "note_state", err.Error())
+		return
 	case errors.Is(err, auth.ErrCSRF):
 		respondError(w, http.StatusForbidden, "csrf", "Your session could not be verified for this change. Refresh and try again.")
 	default:
+		// Never leak internals to the client, always leave a trail for us:
+		// an unmapped 500 is a bug we have not named yet.
+		slog.Error("unmapped store error", "err", err)
 		respondError(w, http.StatusInternalServerError, "internal", "The archive is momentarily unreachable.")
 	}
 }

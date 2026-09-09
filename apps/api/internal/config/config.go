@@ -46,6 +46,10 @@ type Config struct {
 	// Reader text cache (immutable objects keyed by etext id; MinIO in prod)
 	ReaderCacheDir string
 
+	// Edge rate limit (token bucket per client IP)
+	RatePerMin int
+	RateBurst  int
+
 	// Identity / WebAuthn
 	WebAuthnRPID          string // relying-party ID, e.g. alexandria.example
 	WebAuthnRPDisplayName string
@@ -86,6 +90,9 @@ func Load() Config {
 		GutenbergCatalogURL: getenv("GUTENBERG_CATALOG_URL",
 			"https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv.gz"),
 		ReaderCacheDir:      getenv("READER_CACHE_DIR", ""),
+
+		RatePerMin: getint("RATE_LIMIT_PER_MIN", 120),
+		RateBurst:  getint("RATE_LIMIT_BURST", 30),
 
 		WebAuthnRPID:          getenv("WEBAUTHN_RP_ID", "localhost"),
 		WebAuthnRPDisplayName: getenv("WEBAUTHN_RP_NAME", "Alexandria"),

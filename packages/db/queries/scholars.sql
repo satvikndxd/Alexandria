@@ -19,10 +19,12 @@ RETURNING *;
 SELECT * FROM scholar_profiles WHERE user_id = @user_id;
 
 -- name: SetScholarStatus :execrows
+-- The literal is cast explicitly: reusing @status in both an enum assignment
+-- and a comparison leaves Postgres unable to deduce the parameter's type.
 UPDATE scholar_profiles
    SET status = @status,
-       verified_by = CASE WHEN @status = 'verified' THEN sqlc.narg('verified_by') ELSE verified_by END,
-       verified_at = CASE WHEN @status = 'verified' THEN now() ELSE verified_at END
+       verified_by = CASE WHEN @status = 'verified'::scholar_status THEN sqlc.narg('verified_by') ELSE verified_by END,
+       verified_at = CASE WHEN @status = 'verified'::scholar_status THEN now() ELSE verified_at END
  WHERE user_id = @user_id;
 
 -- name: ListPendingScholarProfiles :many

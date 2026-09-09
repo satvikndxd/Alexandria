@@ -116,6 +116,10 @@ func newEnv(t *testing.T) *env {
 		NewAccountDaily:       2,
 		TrustedDaily:          10,
 		TrustedReputation:     100,
+		// The suites make hundreds of requests from one address; the bucket
+		// is a production control, not a subject under test here.
+		RatePerMin: 1_000_000,
+		RateBurst:  1_000_000,
 	}
 	authSvc, err := auth.NewService(st, cfg.WebAuthnRPID, cfg.WebAuthnRPDisplayName, cfg.WebAuthnOrigins, false)
 	if err != nil {

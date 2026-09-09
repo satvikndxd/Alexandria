@@ -326,6 +326,8 @@ type Querier interface {
 	SetCurrentClubRead(ctx context.Context, arg SetCurrentClubReadParams) (ClubRead, error)
 	SetEmailVerified(ctx context.Context, id uuid.UUID) error
 	SetNoteStatus(ctx context.Context, arg SetNoteStatusParams) (int64, error)
+	// The literal is cast explicitly: reusing @status in both an enum assignment
+	// and a comparison leaves Postgres unable to deduce the parameter's type.
 	SetScholarStatus(ctx context.Context, arg SetScholarStatusParams) (int64, error)
 	SoftDeleteMessage(ctx context.Context, arg SoftDeleteMessageParams) (int64, error)
 	SoftDeleteReview(ctx context.Context, arg SoftDeleteReviewParams) (int64, error)

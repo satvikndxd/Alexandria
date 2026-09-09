@@ -78,6 +78,9 @@ export default async function BookPage({ params }: { params: { slug: string } })
             <Link href={`/books/${w.slug}/review`} className="btn-solid">
               Write a review
             </Link>
+            <Link href={`/books/${w.slug}/note`} className="btn-print">
+              Submit a scholar note
+            </Link>
             <Link href={`/books/${w.slug}/purchase`} className="btn-print">
               Purchase options
             </Link>

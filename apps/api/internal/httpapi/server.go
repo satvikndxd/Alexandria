@@ -55,9 +55,9 @@ func New(cfg config.Config, st *store.Store, authSvc *auth.Service, magic *auth.
 			TrustedDaily:      cfg.TrustedDaily,
 			TrustedReputation: cfg.TrustedReputation,
 		},
-		// 120 requests/minute sustained with a burst of 30, per client IP.
-		// Generous for a human, punishing for a scraper.
-		limiter: ratelimit.New(120, 30),
+		// Token bucket per client IP: generous for a human, punishing for a
+		// scraper. Tests raise both knobs so suites are not rate-limited.
+		limiter: ratelimit.New(cfg.RatePerMin, cfg.RateBurst),
 	}
 	s.router = s.routes()
 	return s
@@ -154,6 +154,19 @@ func (s *Server) routes() chi.Router {
 
 		// ---- discovery ----
 		r.Get("/search", s.handleSearch)
+
+		// ---- scholarship (Phase 4) ----
+		r.Post("/works/{slug}/notes", requireAuth(s.handleCreateNote))
+		r.Get("/notes/{id}", s.handleGetNote)
+		r.Patch("/notes/{id}", requireAuth(s.handleUpdateNote))
+		r.Post("/notes/{id}/submit", requireAuth(s.handleSubmitNote))
+		r.Post("/notes/{id}/review", requireAuth(s.handleReviewNote))
+		r.Post("/notes/{id}/retract", requireAuth(s.handleRetractNote))
+		r.Get("/me/scholar-profile", requireAuth(s.handleScholarProfile))
+		r.Post("/me/scholar-profile", requireAuth(s.handleScholarApply))
+		r.Get("/scholar/queue", requireAuth(s.handleScholarQueue))
+		r.Get("/moderation/scholars", requireModeration(s.handlePendingScholars))
+		r.Post("/moderation/scholars/{userID}", requireModeration(s.handleSetScholarStatus))
 
 		// ---- reader (Phase 3) ----
 		r.Get("/editions/{id}/reader", s.handleReaderMeta)

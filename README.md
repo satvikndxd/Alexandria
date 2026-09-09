@@ -181,6 +181,8 @@ model, thirty documents, each citing the file that implements it — lives in
    anchors; typeset reader with per-reader typography (size/leading/margin/
    theme), illuminated drop cap, and private margin notes/highlights ·
    *(EPUB ⏳)*
-4. **Community** — scholar verification + peer review, clubs with LiveKit voice/video
+4. **Community** ✅ (scholarship) — scholar applications, moderator
+   verification, citation-gated submission, two-verified-scholar peer review
+   with public revision history and retraction · *(LiveKit voice/video ⏳)*
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a PR.
