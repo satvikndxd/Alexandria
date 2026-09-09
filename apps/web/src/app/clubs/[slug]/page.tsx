@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageFrame } from "@/components/frame/PageFrame";
 import { TempleEmblem } from "@/components/Engravings";
+import { RoomJoin } from "@/components/clubs/RoomJoin";
 import { me, requestCookie } from "@/lib/session";
 import { tryGet } from "@/lib/api";
 import { listClubs, relativeWhen } from "@/lib/content";
@@ -104,7 +105,9 @@ export default async function ClubPage({
         </nav>
 
         <section aria-label={active ? `Messages in ${active.name}` : "Messages"}>
-          {gated.blocked ? (
+          {active && (active.kind === "voice" || active.kind === "video") ? (
+            <RoomJoin channelId={active.id} kind={active.kind} />
+          ) : gated.blocked ? (
             <div className="panel px-6 py-8 text-center">
               <p className="engraved-label !text-vermilion">Spoiler gate</p>
               <p className="pullquote mt-3 max-w-[46ch] mx-auto">

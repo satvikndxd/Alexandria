@@ -184,8 +184,10 @@ model, thirty documents, each citing the file that implements it — lives in
 5. **Portability** ✅ — Goodreads/StoryGraph CSV importers and a Kindle
    clippings parser that aligns highlights to real text offsets; row-by-row
    import reports; one-command JSON export and account deletion
-4. **Community** ✅ (scholarship) — scholar applications, moderator
-   verification, citation-gated submission, two-verified-scholar peer review
-   with public revision history and retraction · *(LiveKit voice/video ⏳)*
+4. **Community** ✅ — scholar applications, moderator verification,
+   citation-gated submission, two-verified-scholar peer review with public
+   revision history and retraction; LiveKit voice/video rooms whose tokens are
+   minted only after membership and spoiler-gate checks (LiveKit is the SFU,
+   not the authority; recording is ungrantable)
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a PR.

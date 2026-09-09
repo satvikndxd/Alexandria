@@ -120,6 +120,11 @@ func newEnv(t *testing.T) *env {
 		// is a production control, not a subject under test here.
 		RatePerMin: 1_000_000,
 		RateBurst:  1_000_000,
+		// Rooms are configured in tests so authorization (not availability)
+		// is what the suite exercises.
+		LiveKitURL:       "wss://lk.test",
+		LiveKitAPIKey:    "test-key",
+		LiveKitAPISecret: "test-secret-test-secret",
 	}
 	authSvc, err := auth.NewService(st, cfg.WebAuthnRPID, cfg.WebAuthnRPDisplayName, cfg.WebAuthnOrigins, false)
 	if err != nil {

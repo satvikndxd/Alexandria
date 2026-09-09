@@ -20,6 +20,7 @@ import (
 	"github.com/alexandria-reads/alexandria/apps/api/internal/domain"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/ratelimit"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/reader"
+	"github.com/alexandria-reads/alexandria/apps/api/internal/realtime"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/search"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/store"
 )
@@ -31,6 +32,7 @@ type Server struct {
 	magic     *auth.MagicLinks
 	search    *search.Client
 	textCache *reader.Cache
+	lk        realtime.Config
 	bootCtx   context.Context
 	friction  domain.FrictionPolicy
 	limiter   *ratelimit.Limiter
@@ -47,6 +49,9 @@ func New(cfg config.Config, st *store.Store, authSvc *auth.Service, magic *auth.
 		magic:     magic,
 		search:    sc,
 		textCache: reader.NewCache(cfg.ReaderCacheDir),
+		lk: realtime.Config{
+			URL: cfg.LiveKitURL, APIKey: cfg.LiveKitAPIKey, APISecret: cfg.LiveKitAPISecret,
+		},
 		bootCtx:   context.Background(),
 		friction: domain.FrictionPolicy{
 			MinBodyChars:      cfg.ReviewMinChars,
@@ -149,6 +154,7 @@ func (s *Server) routes() chi.Router {
 		r.Post("/clubs/{slug}/join", requireAuth(s.handleJoinClub))
 		r.Delete("/clubs/{slug}/join", requireAuth(s.handleLeaveClub))
 		r.Get("/clubs/{slug}/channels", s.handleListChannels)
+		r.Post("/channels/{id}/room/token", requireAuth(s.handleRoomToken))
 		r.Get("/channels/{id}/messages", s.handleListMessages)
 		r.Post("/channels/{id}/messages", requireAuth(s.handlePostMessage))
 

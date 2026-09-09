@@ -50,6 +50,11 @@ type Config struct {
 	RatePerMin int
 	RateBurst  int
 
+	// LiveKit (voice/video rooms); empty URL disables rooms honestly
+	LiveKitURL       string
+	LiveKitAPIKey    string
+	LiveKitAPISecret string
+
 	// Identity / WebAuthn
 	WebAuthnRPID          string // relying-party ID, e.g. alexandria.example
 	WebAuthnRPDisplayName string
@@ -93,6 +98,10 @@ func Load() Config {
 
 		RatePerMin: getint("RATE_LIMIT_PER_MIN", 120),
 		RateBurst:  getint("RATE_LIMIT_BURST", 30),
+
+		LiveKitURL:       getenv("LIVEKIT_URL", ""),
+		LiveKitAPIKey:    getenv("LIVEKIT_API_KEY", ""),
+		LiveKitAPISecret: getenv("LIVEKIT_API_SECRET", ""),
 
 		WebAuthnRPID:          getenv("WEBAUTHN_RP_ID", "localhost"),
 		WebAuthnRPDisplayName: getenv("WEBAUTHN_RP_NAME", "Alexandria"),

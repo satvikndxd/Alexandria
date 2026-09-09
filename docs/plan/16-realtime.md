@@ -1,7 +1,8 @@
 # 16 — Realtime Communication Architecture
 
-**Status:** research/decision document · text chat implemented over HTTP;
-voice/video ⏳ Phase 4
+**Status:** rooms implemented · `internal/realtime` (stdlib HS256 LiveKit
+tokens, unit-tested), `POST /v1/channels/{id}/room/token`, web `RoomJoin`
+with a dynamic livekit-client import · text chat remains HTTP by design
 
 ## Text chat (implemented shape)
 Club messages are persisted in Postgres (`messages`) and read over HTTP with
@@ -18,15 +19,25 @@ first-class Flutter/Web SDKs, self-hostable, token auth we can mint from club
 roles). **Decision: LiveKit**, self-hosted on K3s in production, single node
 in compose for dev.
 
-## Architecture (Phase 4)
-- Mint short-lived LiveKit tokens from club membership + role; voice channel
-  ↔ LiveKit room 1:1.
-- Spoiler gating extends to rooms: a gated voice channel mutes (cannot join)
-  below threshold — the gate is already data (`channels.spoiler_threshold_bp`).
+## Architecture (implemented)
+- `realtime.Config.MintRoomToken` signs short-lived HS256 JWTs with the
+  LiveKit video grant (roomJoin, canPublish, canSubscribe; **canRecord always
+  false**). Built on the standard library: a room token is three claims and a
+  signature.
+- **LiveKit is the SFU, not the authority.** The endpoint checks, in order:
+  channel kind is voice/video (text channels are read, not joined), caller is
+  a club member, and the channel's spoiler gate is passed — inside the
+  caller's RLS context, because the gate reads private reading progress. Only
+  then is a token signed; a leaked room name grants nothing.
+- Room names derive deterministically from club slug + channel id
+  (`realtime.RoomName`), so rooms and channels cannot drift.
+- Unconfigured instances answer 503 `rooms_disabled` instead of minting
+  tokens for a server that is not there.
+- Web loads `livekit-client` via dynamic import: readers who never join a
+  room never download an SFU SDK.
 - TURN: self-hosted coturn; bandwidth cost modelled in [29](29-cost-model.md).
-- Moderation: room events logged; moderator kick/mute via LiveKit server SDK;
-  recordings **off by default** and only with all-party consent banner (legal
-  review, [21](21-licensing-legal.md)).
+- Moderation of rooms (kick/mute via the server SDK) and consent banners for
+  any future recording remain ⏳; recording itself is ungrantable today.
 - Presence: ephemeral, never persisted, never a metric.
 
 ## What we will not build
