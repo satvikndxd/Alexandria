@@ -1,0 +1,5 @@
+app_identifier("org.alexandria.reads")
+# Apple ID + app-specific password from CI secrets; never committed.
+apple_id(ENV["APPLE_ID"] || "")
+itc_team_id(ENV["ITC_TEAM_ID"] || "")
+team_id(ENV["TEAM_ID"] || "")

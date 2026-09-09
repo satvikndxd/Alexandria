@@ -9,7 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  google_fonts: ^6.2.1 # EB Garamond + UnifrakturMaguntia (both OFL)
 
 dev_dependencies:
   flutter_test:
@@ -18,3 +17,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: false
+  # Both families are OFL and bundled: no runtime font fetching, ever.
+  fonts:
+    - family: EBGaramond
+      fonts:
+        - asset: assets/fonts/EBGaramond[wght].ttf
+        - asset: assets/fonts/EBGaramond-Italic[wght].ttf
+          style: italic
+    - family: UnifrakturMaguntia
+      fonts:
+        - asset: assets/fonts/UnifrakturMaguntia-Book.ttf

@@ -1,102 +1,162 @@
 import 'package:flutter/widgets.dart';
-import 'package:google_fonts/google_fonts.dart';
 
+import 'app_scope.dart';
+import 'app_state.dart';
+import 'core/api.dart';
+import 'screens/auth_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/library_screen.dart';
 import 'theme/tokens.dart';
+import 'theme/typography.dart';
 import 'widgets/drop_cap.dart';
+import 'widgets/ornament.dart';
 
-void main() => runApp(const AlexandriaApp());
-
-/// App shell. Deliberately built on WidgetsApp, not MaterialApp:
-/// Alexandria's UI is drawn from its own design system — no Material
-/// ink ripples, no Cupertino chrome, no default SaaS look to fight.
-class AlexandriaApp extends StatelessWidget {
-  const AlexandriaApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return WidgetsApp(
-      title: 'Alexandria',
-      color: AlexandriaColors.ink,
-      builder: (context, _) => const _Atrium(),
-    );
-  }
+/// App shell. Deliberately built on WidgetsApp, not MaterialApp: Alexandria's
+/// UI is drawn from its own design system — no Material ink ripples, no
+/// Cupertino chrome, no default SaaS look to fight.
+void main() {
+  const apiBase = String.fromEnvironment('ALEXANDRIA_API', defaultValue: 'http://127.0.0.1:8080/v1');
+  runApp(AlexandriaApp(state: AppState(ApiClient(baseUrl: apiBase))));
 }
 
-class _Atrium extends StatelessWidget {
-  const _Atrium();
+class AlexandriaApp extends StatelessWidget {
+  const AlexandriaApp({super.key, required this.state});
+
+  final AppState state;
 
   @override
   Widget build(BuildContext context) {
-    final body = GoogleFonts.ebGaramond(
-      fontSize: 17,
-      height: 1.55,
-      color: AlexandriaColors.inkSoft,
-    );
-
-    return ColoredBox(
-      color: AlexandriaColors.parchment,
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Text(
-                  'Alexandria',
-                  style: GoogleFonts.unifrakturMaguntia(
-                    fontSize: 40,
-                    color: AlexandriaColors.ink,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Center(
-                child: Text(
-                  'A HUMAN LIBRARY',
-                  style: GoogleFonts.ebGaramond(
-                    fontSize: 11,
-                    letterSpacing: AlexandriaMetrics.letterSpacingEngraved,
-                    color: AlexandriaColors.botanical,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const _DoubleRule(),
-              const SizedBox(height: 24),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const DropCap(letter: 'B', size: 84),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'ooks are written by humans, discussed by humans, '
-                      'explained by humans, and read by humans.',
-                      style: body,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+    return AppStateScope(
+      state: state,
+      child: WidgetsApp(
+        title: 'Alexandria',
+        color: AlexandriaColors.ink,
+        onGenerateRoute: (_) => PageRouteBuilder(
+          opaque: true,
+          pageBuilder: (_, __, ___) => const _Root(),
         ),
       ),
     );
   }
 }
 
-class _DoubleRule extends StatelessWidget {
-  const _DoubleRule();
+class _Root extends StatefulWidget {
+  const _Root();
+
+  @override
+  State<_Root> createState() => _RootState();
+}
+
+class _RootState extends State<_Root> {
+  int _tab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh the session once the tree exists; failures are silent because
+    // an unreachable API must still show the catalogue.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppStateScope.of(context).refreshMe();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(height: 1, color: AlexandriaColors.ink),
-        const SizedBox(height: 2),
-        Container(height: 1, color: AlexandriaColors.ink),
-      ],
+    final state = AppStateScope.of(context);
+    return AnimatedBuilder(
+      animation: state,
+      builder: (context, _) => ColoredBox(
+        color: AlexandriaColors.parchment,
+        child: SafeArea(
+          child: Column(
+            children: [
+              _masthead(state),
+              const InkRule(color: AlexandriaColors.inkFaint),
+              Expanded(
+                child: switch (_tab) {
+                  1 => LibraryScreen(state: state),
+                  2 => state.signedIn ? const _SignOutPane() : AuthScreen(state: state),
+                  _ => HomeScreen(state: state),
+                },
+              ),
+              _bottomBar(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _masthead(AppState state) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const DropCap(letter: 'A', size: 44),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Alexandria',
+                  style: AlexType.body(fontSize: 26, letterSpacing: 6, color: AlexandriaColors.ink),
+                ),
+                Text(
+                  'BOOKS · PEOPLE · IDEAS · FOREVER',
+                  style: AlexType.body(fontSize: 9, letterSpacing: 2.2, color: AlexandriaColors.inkFaint),
+                ),
+              ],
+            ),
+          ),
+          if (state.signedIn)
+            Text(state.username, style: AlexType.body(fontSize: 12, color: AlexandriaColors.botanical)),
+        ],
+      ),
+    );
+  }
+
+  Widget _bottomBar() {
+    const labels = ['Atrium', 'Library', 'Account'];
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AlexandriaColors.ink, width: 2)),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _tab = i),
+                child: Container(
+                  color: _tab == i ? AlexandriaColors.ink : null,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  alignment: Alignment.center,
+                  child: Text(
+                    labels[i],
+                    style: AlexType.body(
+                      fontSize: 12,
+                      letterSpacing: 1.8,
+                      color: _tab == i ? AlexandriaColors.parchmentLight : AlexandriaColors.inkSoft,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SignOutPane extends StatelessWidget {
+  const _SignOutPane();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text('Signed in. Your shelves and margin live in the Library tab.'),
     );
   }
 }

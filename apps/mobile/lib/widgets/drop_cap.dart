@@ -1,9 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/tokens.dart';
+import '../theme/typography.dart';
 
 /// DropCap — the illuminated initial, rendered with CustomPainter so the
 /// botanical ornament is drawn (not rasterized) at any DPI, matching the
@@ -21,6 +21,9 @@ class DropCap extends StatelessWidget {
     final ch = letter.isEmpty ? 'A' : letter[0].toUpperCase();
     return Semantics(
       label: 'Illuminated initial $ch',
+      // A semantics label is spoken; without a direction the framework
+      // cannot read it (asserted since Flutter 3.x).
+      textDirection: TextDirection.ltr,
       image: true,
       child: CustomPaint(
         size: Size.square(size),
@@ -187,7 +190,7 @@ class _DropCapPainter extends CustomPainter {
     final painter = TextPainter(
       text: TextSpan(
         text: letter,
-        style: GoogleFonts.unifrakturMaguntia(
+        style: AlexType.display(
           fontSize: 60,
           color: AlexandriaColors.vermilion,
         ),

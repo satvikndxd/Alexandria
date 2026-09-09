@@ -21,7 +21,8 @@ alexandria/
 │   │   ├── cmd/migrate   embedded, checksummed, forward-only migrations
 │   │   └── cmd/reindex   rebuild the Meilisearch projection from Postgres
 │   ├── web/          Next.js 14 App Router (custom Tailwind design system)
-│   └── mobile/       Flutter 3 (CustomPainter drop caps, no Material chrome)
+│   └── mobile/       Flutter 3 (widgets-only, bundled OFL fonts, no runtime
+                   fetching; CustomPainter drop caps & covers; Fastlane lanes)
 ├── packages/
 │   ├── db/           SQL schema: migrations (embedded) + sqlc queries (source of truth)
 │   ├── core/         Shared tokens, friction constants, types

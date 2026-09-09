@@ -1,0 +1,25 @@
+# Android beta lane: build the signed app bundle with Flutter, then upload to
+# the Play internal-testing track. Credentials come from CI secrets only.
+default_platform(:android)
+
+platform :android do
+  desc "Build + upload an internal beta"
+  lane :beta do
+    Dir.chdir("../..") do
+      sh("flutter", "build", "appbundle", "--release")
+    end
+    supply(
+      track: "internal",
+      aab: "../../build/app/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+    )
+  end
+
+  desc "Build a release APK for sideloadable F-Droid-style distribution"
+  lane :apk do
+    Dir.chdir("../..") do
+      sh("flutter", "build", "apk", "--release")
+    end
+  end
+end

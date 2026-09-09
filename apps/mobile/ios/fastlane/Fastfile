@@ -1,0 +1,18 @@
+# iOS/TestFlight beta lane. Signing uses a match certificate stored in a
+# private repo or CI secret bundle; nothing identity-bearing lives here.
+default_platform(:ios)
+
+platform :ios do
+  desc "Build + upload a TestFlight beta"
+  lane :beta do
+    Dir.chdir("../..") do
+      sh("flutter", "build", "ios", "--release", "--no-codesign")
+    end
+    build_app(
+      workspace: "../../ios/Runner.xcworkspace",
+      scheme: "Runner",
+      export_method: "app-store",
+    )
+    upload_to_testflight(skip_waiting_for_build_processing: true)
+  end
+end
