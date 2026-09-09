@@ -7,6 +7,7 @@ import {
   IconQuill,
   IconReader,
   IconCompass as IconSearch,
+  IconFolio,
 } from "@/components/Ornament";
 
 /**
@@ -21,6 +22,7 @@ const NAV = [
   { href: "/notes", label: "Notes", icon: IconQuill },
   { href: "/clubs", label: "Communities", icon: IconReader },
   { href: "/search", label: "Search", icon: IconSearch },
+  { href: "/settings", label: "Settings", icon: IconFolio },
 ] as const;
 
 export function SideRail({ pathname }: { pathname: string }) {

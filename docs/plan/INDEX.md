@@ -23,7 +23,7 @@ says so.
 | 10 | [API Specification](10-api-specification.md) | implemented |
 | 11 | [Book Data & Cover Strategy](11-book-data-cover-strategy.md) | partial |
 | 12 | [Project Gutenberg Integration](12-gutenberg-integration.md) | partial |
-| 13 | [Kindle / External Reading Integrations](13-external-integrations.md) | research |
+| 13 | [Kindle / External Reading Integrations](13-external-integrations.md) | implemented (user-export path) |
 | 14 | [Social & Community Architecture](14-social-community.md) | implemented |
 | 15 | [Scholar System](15-scholar-system.md) | implemented |
 | 16 | [Realtime Communication](16-realtime.md) | research |

@@ -3,8 +3,10 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"strconv"
 	"time"
 
@@ -142,6 +144,9 @@ func queryTime(r *http.Request, key string) *time.Time {
 	}
 	return &t
 }
+
+// stringReader adapts a posted body string to the parsers' io.Reader input.
+func stringReader(s string) io.Reader { return strings.NewReader(s) }
 
 // urlSlug is the single place URL parameters are read, so slug handling
 // (lower-casing, trimming) cannot drift between handlers.

@@ -1,7 +1,10 @@
 # 13 — Kindle / External Reading Integrations
 
-**Status:** research document · nothing here is implemented · no API is
-assumed to exist unless named with its mechanism
+**Status:** implemented for the user-export classes · `internal/importx`
+(pure parsers, unit-tested), `internal/store/imports.go` (transactional apply
+with provenance), `/v1/imports/*`, `/v1/export`, `/v1/account/delete`, web
+`/settings` · the "not realistically possible" classes remain unbuilt by
+decision, not by omission
 
 ## Classification
 | Integration | Class | Mechanism | Notes |
@@ -13,6 +16,27 @@ assumed to exist unless named with its mechanism
 | Google Books | Official API (metadata only) | Books API v1 | Metadata/shelves only; thumbnails are **not** redistribution rights ([11](11-book-data-cover-strategy.md)). |
 | Apple Books / Kobo | Not realistically possible | — | No user-exportable progress path that does not involve scraping proprietary clients. |
 | Library systems (Alma/Primo) | Future research | SIP2/NCIP or vendor APIs per institution | Phase 6+; per-institution configuration, never credentials in our DB. |
+
+## What shipped (Phase 5)
+- **Goodreads `reviews.csv`** and **StoryGraph CSV**: header-driven parsing,
+  status-vocabulary mapping per platform, ISBN-13 cleaned from spreadsheet
+  quoting, conservative matching (ISBN13 → exact normalized title with an
+  author-surname check), ratings without qualifying prose stored as private
+  shelf ratings (`shelf_items.rating`, migration 0013) and never as stub
+  reviews, imported prose published only if it clears the 150-char bar,
+  provenance stamped (`imported_from`).
+- **Kindle `My Clippings.txt`**: parsed blocks (highlight/note/bookmark), then
+  aligned against the cached public-domain text with exact whitespace-collapsed
+  matching and rune-true offsets (`importx.Align`); unanchorable clippings are
+  reported, never guessed. Device "locations" are ignored as meaningless.
+- **Reports**: every import returns counts plus per-row skips with reasons
+  (`no_matching_work`, `review_exists`, `review_below_minimum`, `not_aligned`),
+  surfaced in the UI.
+- **Throttle**: three imports per hour per hashed bucket (migration 0013 adds
+  the `import` kind to the attempt bucket).
+- **Export & deletion**: `GET /v1/export` returns the whole life as JSON;
+  `POST /v1/account/delete` soft-deletes and revokes sessions immediately,
+  hard purge after the appeal window.
 
 ## Principles
 1. **User-controlled export only.** If a platform offers no export, the

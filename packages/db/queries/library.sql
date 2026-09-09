@@ -83,7 +83,11 @@ SELECT si.id, si.shelf_id, si.work_id, si.edition_id, si.format, si.added_at,
        s.kind AS shelf_kind, s.name AS shelf_name, s.is_private,
        w.slug AS work_slug, w.title AS work_title, w.first_published,
        w.rating_sum, w.rating_count, w.is_public_domain,
-       rs.id AS session_id, rs.progress_bp, rs.started_on, rs.finished_on, rs.dnf,
+       -- The lateral join yields NULL for shelved works with no session yet;
+       -- coalesce explicitly or the scan fails on the first such row.
+       rs.id AS session_id,
+       coalesce(rs.progress_bp, 0)::integer AS progress_bp,
+       rs.started_on, rs.finished_on, coalesce(rs.dnf, false)::boolean AS dnf,
        (SELECT a.name FROM work_authors wa JOIN authors a ON a.id = wa.author_id
          WHERE wa.work_id = w.id ORDER BY wa.position LIMIT 1) AS primary_author,
        (SELECT ca.object_key FROM editions e
@@ -107,7 +111,9 @@ SELECT si.id, si.shelf_id, si.work_id, si.edition_id, si.format, si.added_at,
 -- name: GetLibraryEntry :one
 -- What the book page needs to render the caller's own state.
 SELECT si.id AS shelf_item_id, s.kind AS shelf_kind, si.format, si.added_at,
-       rs.id AS session_id, rs.progress_bp, rs.started_on, rs.finished_on, rs.dnf
+       rs.id AS session_id,
+       coalesce(rs.progress_bp, 0)::integer AS progress_bp,
+       rs.started_on, rs.finished_on, coalesce(rs.dnf, false)::boolean AS dnf
   FROM shelves s
   JOIN shelf_items si ON si.shelf_id = s.id AND si.work_id = @work_id
   LEFT JOIN LATERAL (

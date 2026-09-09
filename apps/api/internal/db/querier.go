@@ -42,6 +42,7 @@ type Querier interface {
 	CountContributionsSince(ctx context.Context, arg CountContributionsSinceParams) (int64, error)
 	CountFollows(ctx context.Context, userID uuid.UUID) (CountFollowsRow, error)
 	CountGutenbergTexts(ctx context.Context) (int64, error)
+	CountImportsSince(ctx context.Context, arg CountImportsSinceParams) (int64, error)
 	// Distinct verified scholars, excluding the author: the peer-review gate.
 	CountNoteApprovals(ctx context.Context, arg CountNoteApprovalsParams) (int64, error)
 	CountNoteCitations(ctx context.Context, noteID uuid.UUID) (int64, error)
@@ -93,6 +94,7 @@ type Querier interface {
 	//     "single use" cannot be violated by two concurrent requests.
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CredentialIDExists(ctx context.Context, id []byte) (bool, error)
+	CustomShelfByName(ctx context.Context, arg CustomShelfByNameParams) (Shelf, error)
 	DeleteAnnotation(ctx context.Context, arg DeleteAnnotationParams) (int64, error)
 	// System shelves are permanent (the library's shape depends on them); only
 	// custom shelves can be removed. Items cascade with the shelf.
@@ -120,9 +122,14 @@ type Querier interface {
 	EnsureSystemShelves(ctx context.Context, userID uuid.UUID) error
 	ExtendSession(ctx context.Context, arg ExtendSessionParams) (int64, error)
 	FetchPendingEmails(ctx context.Context, arg FetchPendingEmailsParams) ([]EmailOutbox, error)
+	FindEditionByISBN13(ctx context.Context, isbn13 *string) (FindEditionByISBN13Row, error)
 	// Login resolves the account from the asserted credential, because a passkey
 	// ceremony begins before we know who is signing in.
 	FindUserByCredentialID(ctx context.Context, credentialID []byte) (User, error)
+	// Import support: matching and provenance-stamped writes.
+	// Matching is conservative — exact normalized title, or ISBN13 — and unmatched
+	// rows are reported to the reader, never invented as new works.
+	FindWorksByNormalizedTitle(ctx context.Context, needle string) ([]Work, error)
 	FinishIngestJob(ctx context.Context, arg FinishIngestJobParams) (int64, error)
 	FinishSession(ctx context.Context, arg FinishSessionParams) (int64, error)
 	// Social graph and the chronological feed.
@@ -179,6 +186,10 @@ type Querier interface {
 	// stable external identifier, never on a title string.
 	GetWorkBySlug(ctx context.Context, slug string) (Work, error)
 	HasUserLikedReview(ctx context.Context, arg HasUserLikedReviewParams) (bool, error)
+	// A finished read from another platform: closed on arrival, with the reader's
+	// own dates. The partial unique index only constrains OPEN sessions, so
+	// imported history never collides with a current read.
+	ImportClosedSession(ctx context.Context, arg ImportClosedSessionParams) (ReadingSession, error)
 	IngestJobStats(ctx context.Context) (IngestJobStatsRow, error)
 	// ---- Covers (rights-aware) --------------------------------------------------
 	InsertCoverAsset(ctx context.Context, arg InsertCoverAssetParams) (CoverAsset, error)
@@ -287,6 +298,7 @@ type Querier interface {
 	ListWorksBySubject(ctx context.Context, arg ListWorksBySubjectParams) ([]Work, error)
 	ListWorksForAuthor(ctx context.Context, arg ListWorksForAuthorParams) ([]ListWorksForAuthorRow, error)
 	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
+	MarkAnnotationImported(ctx context.Context, arg MarkAnnotationImportedParams) (int64, error)
 	MarkEmailFailed(ctx context.Context, arg MarkEmailFailedParams) (int64, error)
 	MarkEmailSent(ctx context.Context, id int64) (int64, error)
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
@@ -304,6 +316,7 @@ type Querier interface {
 	ReadingStatsForUser(ctx context.Context, userID uuid.UUID) (ReadingStatsForUserRow, error)
 	RecordAuthAttempt(ctx context.Context, arg RecordAuthAttemptParams) error
 	RecordContribution(ctx context.Context, arg RecordContributionParams) error
+	RecordImportAttempt(ctx context.Context, arg RecordImportAttemptParams) error
 	RecordLogin(ctx context.Context, id uuid.UUID) error
 	RecordModerationAction(ctx context.Context, arg RecordModerationActionParams) (ModerationAction, error)
 	// Append-only history: every edit is recoverable, which is what makes
@@ -329,6 +342,7 @@ type Querier interface {
 	// The literal is cast explicitly: reusing @status in both an enum assignment
 	// and a comparison leaves Postgres unable to deduce the parameter's type.
 	SetScholarStatus(ctx context.Context, arg SetScholarStatusParams) (int64, error)
+	SetShelfItemRating(ctx context.Context, arg SetShelfItemRatingParams) (int64, error)
 	SoftDeleteMessage(ctx context.Context, arg SoftDeleteMessageParams) (int64, error)
 	SoftDeleteReview(ctx context.Context, arg SoftDeleteReviewParams) (int64, error)
 	SoftDeleteReviewComment(ctx context.Context, arg SoftDeleteReviewCommentParams) (int64, error)

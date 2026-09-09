@@ -181,6 +181,9 @@ model, thirty documents, each citing the file that implements it — lives in
    anchors; typeset reader with per-reader typography (size/leading/margin/
    theme), illuminated drop cap, and private margin notes/highlights ·
    *(EPUB ⏳)*
+5. **Portability** ✅ — Goodreads/StoryGraph CSV importers and a Kindle
+   clippings parser that aligns highlights to real text offsets; row-by-row
+   import reports; one-command JSON export and account deletion
 4. **Community** ✅ (scholarship) — scholar applications, moderator
    verification, citation-gated submission, two-verified-scholar peer review
    with public revision history and retraction · *(LiveKit voice/video ⏳)*

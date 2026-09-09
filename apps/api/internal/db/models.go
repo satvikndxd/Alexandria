@@ -19,6 +19,7 @@ const (
 	AuthChallengeKindWebauthnLogin        AuthChallengeKind = "webauthn_login"
 	AuthChallengeKindMagicLink            AuthChallengeKind = "magic_link"
 	AuthChallengeKindEmailVerification    AuthChallengeKind = "email_verification"
+	AuthChallengeKindImport               AuthChallengeKind = "import"
 )
 
 func (e *AuthChallengeKind) Scan(src interface{}) error {
@@ -658,17 +659,18 @@ type AffiliateLink struct {
 }
 
 type Annotation struct {
-	ID         uuid.UUID          `json:"id"`
-	UserID     uuid.UUID          `json:"user_id"`
-	EditionID  uuid.UUID          `json:"edition_id"`
-	ChapterIdx int32              `json:"chapter_idx"`
-	StartOff   int32              `json:"start_off"`
-	EndOff     int32              `json:"end_off"`
-	Kind       string             `json:"kind"`
-	Body       string             `json:"body"`
-	IsPrivate  bool               `json:"is_private"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID           uuid.UUID          `json:"id"`
+	UserID       uuid.UUID          `json:"user_id"`
+	EditionID    uuid.UUID          `json:"edition_id"`
+	ChapterIdx   int32              `json:"chapter_idx"`
+	StartOff     int32              `json:"start_off"`
+	EndOff       int32              `json:"end_off"`
+	Kind         string             `json:"kind"`
+	Body         string             `json:"body"`
+	IsPrivate    bool               `json:"is_private"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ImportedFrom *string            `json:"imported_from"`
 }
 
 type AuthAttempt struct {
@@ -1025,12 +1027,14 @@ type Shelf struct {
 }
 
 type ShelfItem struct {
-	ID        uuid.UUID          `json:"id"`
-	ShelfID   uuid.UUID          `json:"shelf_id"`
-	WorkID    uuid.UUID          `json:"work_id"`
-	EditionID pgtype.UUID        `json:"edition_id"`
-	Format    NullReadFormat     `json:"format"`
-	AddedAt   pgtype.Timestamptz `json:"added_at"`
+	ID           uuid.UUID          `json:"id"`
+	ShelfID      uuid.UUID          `json:"shelf_id"`
+	WorkID       uuid.UUID          `json:"work_id"`
+	EditionID    pgtype.UUID        `json:"edition_id"`
+	Format       NullReadFormat     `json:"format"`
+	AddedAt      pgtype.Timestamptz `json:"added_at"`
+	Rating       *int32             `json:"rating"`
+	ImportedFrom *string            `json:"imported_from"`
 }
 
 type Subject struct {

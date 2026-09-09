@@ -18,7 +18,7 @@ VALUES ($1, $2, $3, $4)
 ON CONFLICT (shelf_id, work_id) DO UPDATE SET
   edition_id = COALESCE(EXCLUDED.edition_id, shelf_items.edition_id),
   format     = COALESCE(EXCLUDED.format, shelf_items.format)
-RETURNING id, shelf_id, work_id, edition_id, format, added_at
+RETURNING id, shelf_id, work_id, edition_id, format, added_at, rating, imported_from
 `
 
 type AddToShelfParams struct {
@@ -43,6 +43,8 @@ func (q *Queries) AddToShelf(ctx context.Context, arg AddToShelfParams) (ShelfIt
 		&i.EditionID,
 		&i.Format,
 		&i.AddedAt,
+		&i.Rating,
+		&i.ImportedFrom,
 	)
 	return i, err
 }
@@ -51,7 +53,7 @@ const createAnnotation = `-- name: CreateAnnotation :one
 
 INSERT INTO annotations (user_id, edition_id, chapter_idx, start_off, end_off, kind, body, is_private)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, user_id, edition_id, chapter_idx, start_off, end_off, kind, body, is_private, created_at, updated_at
+RETURNING id, user_id, edition_id, chapter_idx, start_off, end_off, kind, body, is_private, created_at, updated_at, imported_from
 `
 
 type CreateAnnotationParams struct {
@@ -90,6 +92,7 @@ func (q *Queries) CreateAnnotation(ctx context.Context, arg CreateAnnotationPara
 		&i.IsPrivate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ImportedFrom,
 	)
 	return i, err
 }
@@ -202,7 +205,9 @@ func (q *Queries) FinishSession(ctx context.Context, arg FinishSessionParams) (i
 
 const getLibraryEntry = `-- name: GetLibraryEntry :one
 SELECT si.id AS shelf_item_id, s.kind AS shelf_kind, si.format, si.added_at,
-       rs.id AS session_id, rs.progress_bp, rs.started_on, rs.finished_on, rs.dnf
+       rs.id AS session_id,
+       coalesce(rs.progress_bp, 0)::integer AS progress_bp,
+       rs.started_on, rs.finished_on, coalesce(rs.dnf, false)::boolean AS dnf
   FROM shelves s
   JOIN shelf_items si ON si.shelf_id = s.id AND si.work_id = $1
   LEFT JOIN LATERAL (
@@ -305,7 +310,7 @@ func (q *Queries) GetShelfByID(ctx context.Context, arg GetShelfByIDParams) (She
 }
 
 const getShelfItem = `-- name: GetShelfItem :one
-SELECT id, shelf_id, work_id, edition_id, format, added_at FROM shelf_items WHERE id = $1
+SELECT id, shelf_id, work_id, edition_id, format, added_at, rating, imported_from FROM shelf_items WHERE id = $1
 `
 
 func (q *Queries) GetShelfItem(ctx context.Context, id uuid.UUID) (ShelfItem, error) {
@@ -318,6 +323,8 @@ func (q *Queries) GetShelfItem(ctx context.Context, id uuid.UUID) (ShelfItem, er
 		&i.EditionID,
 		&i.Format,
 		&i.AddedAt,
+		&i.Rating,
+		&i.ImportedFrom,
 	)
 	return i, err
 }
@@ -419,7 +426,7 @@ func (q *Queries) ListActivityDays(ctx context.Context, arg ListActivityDaysPara
 }
 
 const listAnnotationsForEdition = `-- name: ListAnnotationsForEdition :many
-SELECT id, user_id, edition_id, chapter_idx, start_off, end_off, kind, body, is_private, created_at, updated_at FROM annotations
+SELECT id, user_id, edition_id, chapter_idx, start_off, end_off, kind, body, is_private, created_at, updated_at, imported_from FROM annotations
  WHERE user_id = $1 AND edition_id = $2
    AND ($3::integer IS NULL OR chapter_idx = $3)
  ORDER BY chapter_idx, start_off
@@ -452,6 +459,7 @@ func (q *Queries) ListAnnotationsForEdition(ctx context.Context, arg ListAnnotat
 			&i.IsPrivate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ImportedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -464,7 +472,7 @@ func (q *Queries) ListAnnotationsForEdition(ctx context.Context, arg ListAnnotat
 }
 
 const listAnnotationsForUser = `-- name: ListAnnotationsForUser :many
-SELECT a.id, a.user_id, a.edition_id, a.chapter_idx, a.start_off, a.end_off, a.kind, a.body, a.is_private, a.created_at, a.updated_at, e.title AS edition_title, w.slug AS work_slug, w.title AS work_title
+SELECT a.id, a.user_id, a.edition_id, a.chapter_idx, a.start_off, a.end_off, a.kind, a.body, a.is_private, a.created_at, a.updated_at, a.imported_from, e.title AS edition_title, w.slug AS work_slug, w.title AS work_title
   FROM annotations a
   JOIN editions e ON e.id = a.edition_id
   JOIN works w ON w.id = e.work_id
@@ -491,6 +499,7 @@ type ListAnnotationsForUserRow struct {
 	IsPrivate    bool               `json:"is_private"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ImportedFrom *string            `json:"imported_from"`
 	EditionTitle string             `json:"edition_title"`
 	WorkSlug     string             `json:"work_slug"`
 	WorkTitle    string             `json:"work_title"`
@@ -519,6 +528,7 @@ func (q *Queries) ListAnnotationsForUser(ctx context.Context, arg ListAnnotation
 			&i.IsPrivate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ImportedFrom,
 			&i.EditionTitle,
 			&i.WorkSlug,
 			&i.WorkTitle,
@@ -668,7 +678,11 @@ SELECT si.id, si.shelf_id, si.work_id, si.edition_id, si.format, si.added_at,
        s.kind AS shelf_kind, s.name AS shelf_name, s.is_private,
        w.slug AS work_slug, w.title AS work_title, w.first_published,
        w.rating_sum, w.rating_count, w.is_public_domain,
-       rs.id AS session_id, rs.progress_bp, rs.started_on, rs.finished_on, rs.dnf,
+       -- The lateral join yields NULL for shelved works with no session yet;
+       -- coalesce explicitly or the scan fails on the first such row.
+       rs.id AS session_id,
+       coalesce(rs.progress_bp, 0)::integer AS progress_bp,
+       rs.started_on, rs.finished_on, coalesce(rs.dnf, false)::boolean AS dnf,
        (SELECT a.name FROM work_authors wa JOIN authors a ON a.id = wa.author_id
          WHERE wa.work_id = w.id ORDER BY wa.position LIMIT 1) AS primary_author,
        (SELECT ca.object_key FROM editions e

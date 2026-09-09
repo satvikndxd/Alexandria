@@ -216,6 +216,24 @@ func (e *env) get(c *http.Client, path string) *http.Response {
 	return resp
 }
 
+// sendRaw posts a raw string body (CSV, clippings) without JSON encoding.
+func (e *env) sendRaw(c *http.Client, method, path, raw, csrf string) *http.Response {
+	e.t.Helper()
+	req, err := http.NewRequestWithContext(e.ctx, method, e.url+path, strings.NewReader(raw))
+	if err != nil {
+		e.t.Fatalf("request: %v", err)
+	}
+	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	if csrf != "" {
+		req.Header.Set(auth.CSRFHeaderName, csrf)
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		e.t.Fatalf("%s %s: %v", method, path, err)
+	}
+	return resp
+}
+
 func decodeBody(t *testing.T, resp *http.Response) map[string]any {
 	t.Helper()
 	defer resp.Body.Close() //nolint:errcheck

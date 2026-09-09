@@ -155,6 +155,13 @@ func (s *Server) routes() chi.Router {
 		// ---- discovery ----
 		r.Get("/search", s.handleSearch)
 
+		// ---- portability (Phase 5) ----
+		r.Post("/imports/goodreads", requireAuth(s.handleImportGoodreads))
+		r.Post("/imports/storygraph", requireAuth(s.handleImportStoryGraph))
+		r.Post("/imports/kindle", requireAuth(s.handleImportKindle))
+		r.Get("/export", requireAuth(s.handleExport))
+		r.Post("/account/delete", requireAuth(s.handleDeleteAccount))
+
 		// ---- scholarship (Phase 4) ----
 		r.Post("/works/{slug}/notes", requireAuth(s.handleCreateNote))
 		r.Get("/notes/{id}", s.handleGetNote)
