@@ -95,4 +95,3 @@ func (s *Server) handleRoomToken(w http.ResponseWriter, r *http.Request) {
 		"url":   s.lk.URL,
 	})
 }
-

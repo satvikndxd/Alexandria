@@ -158,6 +158,7 @@ type Querier interface {
 	GetGutenbergText(ctx context.Context, gutenbergID int32) (GutenbergText, error)
 	// What the book page needs to render the caller's own state.
 	GetLibraryEntry(ctx context.Context, arg GetLibraryEntryParams) (GetLibraryEntryRow, error)
+	GetMessage(ctx context.Context, id uuid.UUID) (Message, error)
 	GetOpenSession(ctx context.Context, arg GetOpenSessionParams) (ReadingSession, error)
 	GetPrimaryCoverForEdition(ctx context.Context, editionID uuid.UUID) (CoverAsset, error)
 	GetProfileByUserID(ctx context.Context, userID uuid.UUID) (Profile, error)

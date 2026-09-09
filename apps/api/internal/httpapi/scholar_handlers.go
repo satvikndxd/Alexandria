@@ -161,6 +161,11 @@ func (s *Server) handleReviewNote(w http.ResponseWriter, r *http.Request) {
 		respondStoreError(w, err)
 		return
 	}
+	// The author hears the verdict, addressed to them alone.
+	_ = s.store.Notify(r.Context(), note.AuthorID, "note_reviewed", map[string]any{
+		"approved": req.Approved, "status": string(note.Status),
+		"note_id": id.String(), "reviewer": sess.Username,
+	})
 	respondJSON(w, http.StatusOK, map[string]any{"note": note, "status": note.Status})
 }
 

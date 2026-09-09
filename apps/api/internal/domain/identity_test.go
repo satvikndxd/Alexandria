@@ -62,3 +62,21 @@ func TestReviewLengthIsRuneBased(t *testing.T) {
 		t.Errorf("151+-rune, 16-distinct-word Japanese body = %v, want nil", err)
 	}
 }
+
+func TestValidateCommentCalibration(t *testing.T) {
+	if err := ValidateComment("This changed how I'll reread it."); err != nil {
+		t.Errorf("short legitimate comment rejected: %v", err)
+	}
+	if err := ValidateComment("thank you"); err != nil {
+		t.Errorf("two-word comment rejected: %v", err)
+	}
+	if err := ValidateComment("ok ok ok ok"); err != ErrLowEffortBody {
+		t.Errorf("one-vocabulary loop accepted: %v", err)
+	}
+	if err := ValidateComment(strings.Repeat("x", 50)); err != ErrLowEffortBody {
+		t.Errorf("glyph spam accepted: %v", err)
+	}
+	if err := ValidateComment("a a a a a a a a"); err != ErrLowEffortBody {
+		t.Errorf("three-word loop accepted: %v", err)
+	}
+}

@@ -140,6 +140,27 @@ func (q *Queries) DeleteStaleContributions(ctx context.Context, before pgtype.Ti
 	return result.RowsAffected(), nil
 }
 
+const getMessage = `-- name: GetMessage :one
+SELECT id, channel_id, user_id, body, reply_to, has_spoilers, created_at, edited_at, deleted_at FROM messages WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetMessage(ctx context.Context, id uuid.UUID) (Message, error) {
+	row := q.db.QueryRow(ctx, getMessage, id)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ChannelID,
+		&i.UserID,
+		&i.Body,
+		&i.ReplyTo,
+		&i.HasSpoilers,
+		&i.CreatedAt,
+		&i.EditedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getReport = `-- name: GetReport :one
 SELECT id, reporter_id, subject_type, subject_id, reason, details, status, assigned_to, created_at, resolved_at FROM reports WHERE id = $1
 `
@@ -267,7 +288,8 @@ SELECT r.id, r.reporter_id, r.subject_type, r.subject_id, r.reason, r.details, r
   FROM reports r
   LEFT JOIN users u ON u.id = r.reporter_id
   LEFT JOIN users m ON m.id = r.assigned_to
- WHERE r.status = ANY($1::report_status[])
+ -- pgx cannot encode a slice of a custom enum; compare as text instead.
+ WHERE r.status::text = ANY($1::text[])
  ORDER BY
    CASE r.reason
      WHEN 'threat' THEN 0 WHEN 'hate' THEN 1 WHEN 'harassment' THEN 2
@@ -278,9 +300,9 @@ SELECT r.id, r.reporter_id, r.subject_type, r.subject_id, r.reason, r.details, r
 `
 
 type ListOpenReportsParams struct {
-	Statuses []ReportStatus `json:"statuses"`
-	Off      int32          `json:"off"`
-	Lim      int32          `json:"lim"`
+	Statuses []string `json:"statuses"`
+	Off      int32    `json:"off"`
+	Lim      int32    `json:"lim"`
 }
 
 type ListOpenReportsRow struct {

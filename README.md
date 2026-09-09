@@ -168,6 +168,13 @@ model, thirty documents, each citing the file that implements it — lives in
 - Backend, web, infrastructure: **AGPL-3.0-only** ([LICENSE](LICENSE))
 - Flutter client & design tokens: **MIT** ([apps/mobile/LICENSE](apps/mobile/LICENSE))
 
+## Trust & observability
+Report filing with the moderation enum as its vocabulary; a moderator queue
+ordered by severity whose centre is the written rationale; scholar
+verification; an addressed-only notification centre; and a dependency-free
+Prometheus `/metrics` where friction refusals are counted by code — the
+anti-slop system's effect is observable, not anecdotal.
+
 ## Roadmap
 
 1. **Foundation** ✅ — schema, monolith, ingestion pipeline, design system, web shell

@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alexandria-reads/alexandria/apps/api/internal/auth"
+	"github.com/alexandria-reads/alexandria/apps/api/internal/db"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/domain"
 )
 
@@ -218,8 +219,13 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		respondStoreError(w, err)
 		return
 	}
-	unread, err := s.store.UnreadNotificationCount(r.Context(), sess.UserID)
-	if err != nil {
+	// The bell is RLS-private too: count it inside the reader's scope.
+	var unread int64
+	if err := s.store.ReadUser(r.Context(), sess.UserID, func(q *db.Queries) error {
+		n, err := q.CountUnreadNotifications(r.Context(), sess.UserID)
+		unread = n
+		return err
+	}); err != nil {
 		respondStoreError(w, err)
 		return
 	}

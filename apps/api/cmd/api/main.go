@@ -13,6 +13,7 @@ import (
 	"github.com/alexandria-reads/alexandria/apps/api/internal/config"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/events"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/httpapi"
+	"github.com/alexandria-reads/alexandria/apps/api/internal/metrics"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/search"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/store"
 )
@@ -64,7 +65,8 @@ func main() {
 	}
 
 	// Housekeeping: ceremonies and dead sessions expire on their own, but the
-	// rows need pruning to keep the lookup indexes tight.
+	// rows need pruning to keep the lookup indexes tight; the same tick
+	// publishes queue-depth gauges.
 	go pruneLoop(ctx, st, time.Hour)
 
 	if err := httpapi.New(cfg, st, authSvc, magic, sc).Run(ctx); err != nil {
@@ -83,6 +85,9 @@ func pruneLoop(ctx context.Context, st *store.Store, interval time.Duration) {
 		case <-t.C:
 			if err := st.PruneStaleAuth(ctx); err != nil {
 				slog.Warn("auth pruning failed", "err", err)
+			}
+			if depth, err := st.Queries().OutboxDepth(ctx); err == nil {
+				metrics.SetGauge("outbox_depth", depth)
 			}
 		}
 	}

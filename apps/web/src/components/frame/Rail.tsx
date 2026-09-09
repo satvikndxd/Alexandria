@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Sprig, RuleWithFleuron, TreeVignette } from "@/components/Engravings";
+import { NotifBell } from "./NotifBell";
 import {
   IconColumns,
   IconCompass,
@@ -95,9 +96,12 @@ export function Masthead({ epigraph, attribution }: { epigraph: string; attribut
         </Link>
         <p className="engraved-label mt-2 text-ink-soft">Books · People · Ideas · Forever</p>
       </div>
-      <div className="hidden max-w-xs text-right md:block">
-        <p className="epigraph">“{epigraph}”</p>
-        <p className="engraved-label mt-1">— {attribution}</p>
+      <div className="hidden max-w-xs flex-col items-end gap-2 text-right md:flex">
+        <NotifBell />
+        <div>
+          <p className="epigraph">“{epigraph}”</p>
+          <p className="engraved-label mt-1">— {attribution}</p>
+        </div>
       </div>
     </header>
   );

@@ -1,7 +1,9 @@
 # 17 — Moderation & Trust System
 
-**Status:** reports + moderator actions implemented; queues UI ⏳; human
-moderator network ⏳ community phase
+**Status:** implemented end-to-end · report filing on reviews/notes/etc.,
+moderator queue + scholar verification at `/moderation`, notification centre
+at `/notifications` with addressed notes only, `/metrics` exposing friction
+refusals by code · human moderator recruitment remains a community-phase act
 
 ## Structural friction first ([ADR 0005](../adr/0005-friction-not-detection.md))
 We do not pretend to detect AI text. We make mass low-effort posting
@@ -31,6 +33,21 @@ gamification vectors we refuse.
 DMCA path: `TakedownCover` for covers; content removal action + report
 resolution for text; designated agent process documented in
 [21](21-licensing-legal.md) (legal review pending).
+
+## Surfaces (implemented)
+- `ReportButton` on reviews (and the same vocabulary everywhere): the reason
+  select IS the moderation enum, so a report routes without translation.
+- `/moderation`: queue ordered by severity (threat > hate > harassment > …),
+  action form whose centre is the written rationale (schema CHECK ≥10 chars,
+  surfaced as 422 when absent); scholar applications with verify/reject.
+- Moderation actions resolve the accountable user from the report subject
+  (review author, commenter, message sender, note author) — a report id is
+  not a user id, and the FK rightly refuses the confusion.
+- `/notifications`: addressed notes only (reply to your review, verdict on
+  your note, new follower); mark-one and mark-all; unread count on `/v1/me`
+  computed inside the reader's RLS scope.
+- `/metrics`: Prometheus text format, dependency-free; friction refusals by
+  code so the anti-slop system's effect is observable, not anecdotal.
 
 ## What moderation must never become
 Automated truth arbitration, shadow-banning without a record, or a reputation

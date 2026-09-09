@@ -18,6 +18,7 @@ import (
 	"github.com/alexandria-reads/alexandria/apps/api/internal/auth"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/config"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/domain"
+	"github.com/alexandria-reads/alexandria/apps/api/internal/metrics"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/ratelimit"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/reader"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/realtime"
@@ -52,7 +53,7 @@ func New(cfg config.Config, st *store.Store, authSvc *auth.Service, magic *auth.
 		lk: realtime.Config{
 			URL: cfg.LiveKitURL, APIKey: cfg.LiveKitAPIKey, APISecret: cfg.LiveKitAPISecret,
 		},
-		bootCtx:   context.Background(),
+		bootCtx: context.Background(),
 		friction: domain.FrictionPolicy{
 			MinBodyChars:      cfg.ReviewMinChars,
 			MaxBodyChars:      20000,
@@ -83,6 +84,7 @@ func (s *Server) routes() chi.Router {
 	r.Use(s.csrfProtect)
 
 	r.Get("/healthz", s.handleHealth)
+	r.Method(http.MethodGet, "/metrics", metrics.Handler())
 
 	r.Route("/v1", func(r chi.Router) {
 		// ---- identity ----
@@ -248,6 +250,7 @@ func slogLogger(next http.Handler) http.Handler {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		next.ServeHTTP(ww, r)
+		metrics.ObserveRequest(r.Method, ww.Status())
 		slog.Info("http",
 			"method", r.Method, "path", r.URL.Path,
 			"status", ww.Status(), "bytes", ww.BytesWritten(),

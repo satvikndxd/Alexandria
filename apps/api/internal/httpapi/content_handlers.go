@@ -341,6 +341,13 @@ func (s *Server) handleCreateComment(w http.ResponseWriter, r *http.Request) {
 		respondStoreError(w, err)
 		return
 	}
+	// The review's author hears about it; nobody else does. Notifications are
+	// addressed, never broadcast.
+	if review, rerr := s.store.GetReview(r.Context(), id); rerr == nil && review.UserID != sess.UserID {
+		_ = s.store.Notify(r.Context(), review.UserID, "review_comment", map[string]any{
+			"actor": sess.Username, "review_id": id.String(), "work_slug": review.WorkSlug,
+		})
+	}
 	respondJSON(w, http.StatusCreated, map[string]any{"comment": comment})
 }
 

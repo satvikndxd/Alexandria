@@ -6,14 +6,15 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alexandria-reads/alexandria/apps/api/internal/auth"
+	"github.com/alexandria-reads/alexandria/apps/api/internal/metrics"
 	"github.com/alexandria-reads/alexandria/apps/api/internal/store"
 )
 
@@ -36,6 +37,12 @@ func respondJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func respondError(w http.ResponseWriter, status int, code, msg string) {
+	// 4xx refusals with our own codes are the friction system working; count
+	// them so its effect is observable rather than anecdotal.
+	if status == http.StatusUnprocessableEntity || status == http.StatusTooManyRequests ||
+		status == http.StatusConflict || status == http.StatusForbidden {
+		metrics.ObserveFriction(code)
+	}
 	respondJSON(w, status, map[string]apiError{"error": {Code: code, Message: msg}})
 }
 

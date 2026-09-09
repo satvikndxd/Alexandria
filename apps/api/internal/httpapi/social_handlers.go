@@ -159,6 +159,9 @@ func (s *Server) handleFollow(w http.ResponseWriter, r *http.Request) {
 		respondStoreError(w, err)
 		return
 	}
+	_ = s.store.Notify(r.Context(), target, "new_follower", map[string]any{
+		"actor": sess.Username, "actor_id": sess.UserID.String(),
+	})
 	respondJSON(w, http.StatusOK, map[string]any{"following": true})
 }
 
@@ -206,9 +209,17 @@ func (s *Server) handleUnblock(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 	sess, _ := CurrentUser(r)
 	limit, offset := paginate(r, 30, 100)
-	rows, err := s.store.Notifications(r.Context(), sess.UserID,
-		r.URL.Query().Get("unread") == "true", limit, offset)
-	if err != nil {
+	unread := r.URL.Query().Get("unread") == "true"
+	// Notifications are RLS-private: bare-pool reads see nothing, not even
+	// the caller's own bell.
+	var rows []db.Notification
+	if err := s.scopedRead(r, func(q *db.Queries) error {
+		got, err := q.ListNotifications(r.Context(), db.ListNotificationsParams{
+			UserID: sess.UserID, UnreadOnly: &unread, Lim: limit, Off: offset,
+		})
+		rows = got
+		return err
+	}); err != nil {
 		respondStoreError(w, err)
 		return
 	}
@@ -227,7 +238,14 @@ func (s *Server) handleMarkNotificationsRead(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
-	if err := s.store.MarkNotificationsRead(r.Context(), sess.UserID, req.ID); err != nil {
+	if err := s.store.TxUser(r.Context(), sess.UserID, func(q *db.Queries) error {
+		if req.ID != nil {
+			_, err := q.MarkNotificationRead(r.Context(), db.MarkNotificationReadParams{ID: *req.ID, UserID: sess.UserID})
+			return err
+		}
+		_, err := q.MarkAllNotificationsRead(r.Context(), sess.UserID)
+		return err
+	}); err != nil {
 		respondStoreError(w, err)
 		return
 	}

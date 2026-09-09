@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -119,11 +120,22 @@ func (s *Store) Followers(ctx context.Context, userID uuid.UUID, limit, offset i
 
 // ---- Notifications -------------------------------------------------------------
 
-func (s *Store) Notify(ctx context.Context, userID uuid.UUID, kind string, payload []byte) error {
-	_, err := s.q.CreateNotification(ctx, db.CreateNotificationParams{
-		UserID: userID, Kind: kind, Payload: payload,
+// Notify writes one addressed notification. Payloads are small JSON maps;
+// marshalling lives here so callers cannot forget it.
+func (s *Store) Notify(ctx context.Context, userID uuid.UUID, kind string, payload any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	// Notifications are RLS-private, and this write is system-generated (the
+	// actor is not the recipient), so it runs in the service context — a bare
+	// connection would have RLS refuse the row.
+	return s.Tx(ctx, func(q *db.Queries) error {
+		_, err := q.CreateNotification(ctx, db.CreateNotificationParams{
+			UserID: userID, Kind: kind, Payload: body,
+		})
+		return err
 	})
-	return err
 }
 
 func (s *Store) Notifications(ctx context.Context, userID uuid.UUID, unreadOnly bool, limit, offset int32) ([]db.Notification, error) {

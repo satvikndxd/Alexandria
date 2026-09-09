@@ -16,7 +16,8 @@ SELECT r.*, u.username AS reporter_username,
   FROM reports r
   LEFT JOIN users u ON u.id = r.reporter_id
   LEFT JOIN users m ON m.id = r.assigned_to
- WHERE r.status = ANY(@statuses::report_status[])
+ -- pgx cannot encode a slice of a custom enum; compare as text instead.
+ WHERE r.status::text = ANY(@statuses::text[])
  ORDER BY
    CASE r.reason
      WHEN 'threat' THEN 0 WHEN 'hate' THEN 1 WHEN 'harassment' THEN 2
@@ -85,3 +86,6 @@ DELETE FROM auth_challenges WHERE expires_at < @now;
 -- The ledger only ever needs its trailing window for cap checks; pruning keeps
 -- the index tight without losing auditability (reviews themselves remain).
 DELETE FROM contribution_ledger WHERE created_at < @before;
+
+-- name: GetMessage :one
+SELECT * FROM messages WHERE id = $1 AND deleted_at IS NULL;

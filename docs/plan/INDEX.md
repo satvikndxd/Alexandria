@@ -27,7 +27,7 @@ says so.
 | 14 | [Social & Community Architecture](14-social-community.md) | implemented |
 | 15 | [Scholar System](15-scholar-system.md) | implemented |
 | 16 | [Realtime Communication](16-realtime.md) | implemented (rooms) |
-| 17 | [Moderation & Trust](17-moderation-trust.md) | partial |
+| 17 | [Moderation & Trust](17-moderation-trust.md) | implemented (queue + UI) |
 | 18 | [Security Model](18-security-model.md) | implemented |
 | 19 | [Privacy Model](19-privacy-model.md) | implemented |
 | 20 | [Open-Source Strategy](20-open-source-strategy.md) | living |

@@ -168,7 +168,7 @@ func validReportReason(v string) bool {
 func (s *Server) handleListReports(w http.ResponseWriter, r *http.Request) {
 	limit, offset := paginate(r, 50, 200)
 	rows, err := s.store.Queries().ListOpenReports(r.Context(), db.ListOpenReportsParams{
-		Statuses: []db.ReportStatus{db.ReportStatusOpen, db.ReportStatusInReview},
+		Statuses: []string{"open", "in_review"},
 		Lim:      limit,
 		Off:      offset,
 	})
@@ -208,9 +208,17 @@ func (s *Server) handleModerationAction(w http.ResponseWriter, r *http.Request) 
 		respondStoreError(w, err)
 		return
 	}
+	// The action targets the person responsible for the reported content,
+	// resolved from the subject — a report id is not a user id, and the FK
+	// rightly refuses the confusion.
+	target, err := s.resolveReportTarget(r, report)
+	if err != nil {
+		respondStoreError(w, err)
+		return
+	}
 	action, err := s.store.Queries().RecordModerationAction(r.Context(), db.RecordModerationActionParams{
 		ModeratorID: store.UUIDPtr(&sess.UserID),
-		TargetUser:  store.UUIDPtr(&report.SubjectID),
+		TargetUser:  store.UUIDPtr(target),
 		ReportID:    store.UUIDPtr(&reportID),
 		Kind:        db.ModerationActionKind(req.Kind), Rationale: req.Rationale,
 		ExpiresAt: suspendExpiry(req.SuspendHours),
@@ -234,4 +242,40 @@ func (s *Server) handleModerationAction(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	respondJSON(w, http.StatusOK, map[string]any{"action": action})
+}
+
+// resolveReportTarget maps a report's subject to the accountable user, or
+// nil for subjects without an author we can act against (e.g. a cover).
+func (s *Server) resolveReportTarget(r *http.Request, report db.Report) (*uuid.UUID, error) {
+	ctx := r.Context()
+	switch report.SubjectType {
+	case "user":
+		return &report.SubjectID, nil
+	case "review":
+		row, err := s.store.GetReview(ctx, report.SubjectID)
+		if err != nil {
+			return nil, err
+		}
+		return &row.UserID, nil
+	case "comment":
+		c, err := s.store.Queries().GetReviewComment(ctx, report.SubjectID)
+		if err != nil {
+			return nil, err
+		}
+		return &c.UserID, nil
+	case "message":
+		m, err := s.store.Queries().GetMessage(ctx, report.SubjectID)
+		if err != nil {
+			return nil, err
+		}
+		return &m.UserID, nil
+	case "note":
+		n, err := s.store.GetNote(ctx, report.SubjectID)
+		if err != nil {
+			return nil, err
+		}
+		return &n.AuthorID, nil
+	default:
+		return nil, nil
+	}
 }

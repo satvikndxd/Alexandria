@@ -71,16 +71,43 @@ func ValidateBio(s string) error {
 	return nil
 }
 
-// ValidateComment guards review comments: short-form but not empty, and with
-// enough distinct content that "nice" x200 does not pass.
+// ValidateComment guards review comments. Comments are short-form by nature,
+// so they get a calibrated filler check: the dominant-glyph rule still
+// applies, but the distinct-word floor is four, not the twelve a review must
+// clear — otherwise "This changed how I reread it." would be "filler".
 func ValidateComment(body string) error {
 	body = strings.TrimSpace(body)
 	n := utf8.RuneCountInString(body)
 	if n < 2 || n > 5000 {
 		return errors.New("comments are 2–5000 characters")
 	}
-	if isFiller(body) {
+	if isCommentFiller(body) {
 		return ErrLowEffortBody
 	}
 	return nil
+}
+
+func isCommentFiller(body string) bool {
+	counts := map[rune]int{}
+	total := 0
+	for _, r := range body {
+		if r == ' ' || r == '\n' || r == '\t' {
+			continue
+		}
+		counts[r]++
+		total++
+	}
+	if total == 0 {
+		return true
+	}
+	for _, c := range counts {
+		if float64(c)/float64(total) > 0.4 {
+			return true
+		}
+	}
+	words := map[string]struct{}{}
+	for _, w := range strings.Fields(strings.ToLower(body)) {
+		words[w] = struct{}{}
+	}
+	return len(words) < 2
 }
